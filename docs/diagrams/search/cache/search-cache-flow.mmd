@@ -1,0 +1,26 @@
+flowchart TD
+
+    Request["Search Request"]
+    Normalize["Normalize Search Criteria"]
+    CacheKey["Generate Cache Key"]
+    Cache["Redis Search Cache"]
+
+    Providers["External Providers"]
+    NormalizeOffers["Normalize Offers"]
+    Aggregate["Aggregate Results"]
+    Store["Store in Cache"]
+    Response["Return Search Results"]
+
+    Request --> Normalize
+    Normalize --> CacheKey
+    CacheKey --> Cache
+
+    Cache -->|"Cache Hit"| Response
+
+    Cache -->|"Cache Miss"| Providers
+
+    Providers --> NormalizeOffers
+    NormalizeOffers --> Aggregate
+    Aggregate --> Store
+    Store --> Cache
+    Cache --> Response

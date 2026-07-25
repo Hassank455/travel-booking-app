@@ -1,0 +1,37 @@
+sequenceDiagram
+
+    actor Customer
+    participant API as API Layer
+    participant Search as Search Module
+    participant Cache as Search Cache
+    participant Orchestrator as Search Orchestrator
+    participant A as Flight Provider A
+    participant B as Flight Provider B
+    participant N as Offer Normalizer
+    participant G as Offer Aggregator
+
+    Customer->>API: Search flights
+    API->>Search: Validated search request
+    Search->>Cache: Get normalized search key
+
+    alt Cache hit
+        Cache-->>Search: Cached flight offers
+    else Cache miss
+        Search->>Orchestrator: Execute flight search
+
+        par Provider A request
+            Orchestrator->>A: Search flights
+            A-->>Orchestrator: Provider offers
+        and Provider B request
+            Orchestrator->>B: Search flights
+            B-->>Orchestrator: Provider offers
+        end
+
+        Orchestrator->>N: Normalize provider offers
+        N->>G: Normalized flight offers
+        G-->>Search: Aggregated offers
+        Search->>Cache: Store temporary result
+    end
+
+    Search-->>API: Unified search response
+    API-->>Customer: Flight offers

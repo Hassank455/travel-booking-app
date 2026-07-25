@@ -1,0 +1,37 @@
+sequenceDiagram
+
+    actor Customer
+    participant API as API Layer
+    participant Search as Search Module
+    participant Cache as Search Cache
+    participant Orchestrator as Search Orchestrator
+    participant A as Hotel Provider A
+    participant B as Hotel Provider B
+    participant N as Offer Normalizer
+    participant G as Offer Aggregator
+
+    Customer->>API: Search hotels
+    API->>Search: Validated search request
+    Search->>Cache: Get normalized search key
+
+    alt Cache hit
+        Cache-->>Search: Cached hotel offers
+    else Cache miss
+        Search->>Orchestrator: Execute hotel search
+
+        par Provider A request
+            Orchestrator->>A: Search hotels
+            A-->>Orchestrator: Provider offers
+        and Provider B request
+            Orchestrator->>B: Search hotels
+            B-->>Orchestrator: Provider offers
+        end
+
+        Orchestrator->>N: Normalize provider offers
+        N->>G: Normalized hotel offers
+        G-->>Search: Aggregated offers
+        Search->>Cache: Store temporary result
+    end
+
+    Search-->>API: Unified search response
+    API-->>Customer: Hotel offers

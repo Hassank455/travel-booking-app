@@ -1,0 +1,37 @@
+flowchart TB
+
+    Client["Customer Web / Mobile Application"]
+    API["API Layer"]
+    Search["Search Module"]
+    Cache["Search Cache"]
+    Orchestrator["Search Orchestrator"]
+    Providers["Provider Integration Module"]
+    FlightProviders["Flight Providers"]
+    HotelProviders["Hotel Providers"]
+    Normalizer["Offer Normalizer"]
+    Aggregator["Offer Aggregator"]
+    Ranking["Filtering and Ranking"]
+
+    Client -->|"Search Request"| API
+    API --> Search
+
+    Search -->|"Check Cache"| Cache
+    Cache -->|"Cache Hit"| Search
+    Cache -->|"Cache Miss"| Orchestrator
+
+    Orchestrator --> Providers
+
+    Providers --> FlightProviders
+    Providers --> HotelProviders
+
+    FlightProviders --> Providers
+    HotelProviders --> Providers
+
+    Providers --> Normalizer
+    Normalizer --> Aggregator
+    Aggregator --> Ranking
+    Ranking --> Search
+
+    Search -->|"Store Temporary Results"| Cache
+    Search --> API
+    API --> Client

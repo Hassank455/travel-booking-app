@@ -221,53 +221,15 @@ Cached offers must still be revalidated before booking.
 
 Detailed cache design is documented in:
 
-```text
-10-caching-strategy.md
-```
+[Caching Strategy](10-caching-strategy.md)
 
 ---
 
 ## 5. High-Level Search Flow
 
-```mermaid
-flowchart TB
+See the diagram:
 
-    Client["Customer Web / Mobile Application"]
-    API["API Layer"]
-    Search["Search Module"]
-    Cache["Search Cache"]
-    Orchestrator["Search Orchestrator"]
-    Providers["Provider Integration Module"]
-    FlightProviders["Flight Providers"]
-    HotelProviders["Hotel Providers"]
-    Normalizer["Offer Normalizer"]
-    Aggregator["Offer Aggregator"]
-    Ranking["Filtering and Ranking"]
-
-    Client -->|"Search Request"| API
-    API --> Search
-
-    Search -->|"Check Cache"| Cache
-    Cache -->|"Cache Hit"| Search
-    Cache -->|"Cache Miss"| Orchestrator
-
-    Orchestrator --> Providers
-
-    Providers --> FlightProviders
-    Providers --> HotelProviders
-
-    FlightProviders --> Providers
-    HotelProviders --> Providers
-
-    Providers --> Normalizer
-    Normalizer --> Aggregator
-    Aggregator --> Ranking
-    Ranking --> Search
-
-    Search -->|"Store Temporary Results"| Cache
-    Search --> API
-    API --> Client
-```
+**Diagram:** [Search Flow](./diagrams/search/search-flow.mmd)
 
 ---
 
@@ -286,45 +248,9 @@ A flight search request may include:
 - Currency.
 - Market or locale.
 
-```mermaid
-sequenceDiagram
+See the sequence diagram:
 
-    actor Customer
-    participant API as API Layer
-    participant Search as Search Module
-    participant Cache as Search Cache
-    participant Orchestrator as Search Orchestrator
-    participant A as Flight Provider A
-    participant B as Flight Provider B
-    participant N as Offer Normalizer
-    participant G as Offer Aggregator
-
-    Customer->>API: Search flights
-    API->>Search: Validated search request
-    Search->>Cache: Get normalized search key
-
-    alt Cache hit
-        Cache-->>Search: Cached flight offers
-    else Cache miss
-        Search->>Orchestrator: Execute flight search
-
-        par Provider A request
-            Orchestrator->>A: Search flights
-            A-->>Orchestrator: Provider offers
-        and Provider B request
-            Orchestrator->>B: Search flights
-            B-->>Orchestrator: Provider offers
-        end
-
-        Orchestrator->>N: Normalize provider offers
-        N->>G: Normalized flight offers
-        G-->>Search: Aggregated offers
-        Search->>Cache: Store temporary result
-    end
-
-    Search-->>API: Unified search response
-    API-->>Customer: Flight offers
-```
+**Diagram:** [Flight Search Sequence](./diagrams/search/sequence/flight-search-sequence.mmd)
 
 ---
 
@@ -342,45 +268,7 @@ A hotel search request may include:
 - Market or locale.
 - Optional filters.
 
-```mermaid
-sequenceDiagram
-
-    actor Customer
-    participant API as API Layer
-    participant Search as Search Module
-    participant Cache as Search Cache
-    participant Orchestrator as Search Orchestrator
-    participant A as Hotel Provider A
-    participant B as Hotel Provider B
-    participant N as Offer Normalizer
-    participant G as Offer Aggregator
-
-    Customer->>API: Search hotels
-    API->>Search: Validated search request
-    Search->>Cache: Get normalized search key
-
-    alt Cache hit
-        Cache-->>Search: Cached hotel offers
-    else Cache miss
-        Search->>Orchestrator: Execute hotel search
-
-        par Provider A request
-            Orchestrator->>A: Search hotels
-            A-->>Orchestrator: Provider offers
-        and Provider B request
-            Orchestrator->>B: Search hotels
-            B-->>Orchestrator: Provider offers
-        end
-
-        Orchestrator->>N: Normalize provider offers
-        N->>G: Normalized hotel offers
-        G-->>Search: Aggregated offers
-        Search->>Cache: Store temporary result
-    end
-
-    Search-->>API: Unified search response
-    API-->>Customer: Hotel offers
-```
+**Diagram:** [Hotel Search Sequence](./diagrams/search/sequence/hotel-search-sequence.mmd) 
 
 ---
 
