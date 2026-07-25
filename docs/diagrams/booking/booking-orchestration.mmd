@@ -1,0 +1,23 @@
+flowchart TB
+    Customer["Customer"]
+    SelectOffer["Select Offer"]
+    Revalidate["Revalidate Offer"]
+    PendingBooking["Create Pending Booking"]
+    Payment["Process Payment"]
+    ProviderConfirm["Confirm with Travel Provider"]
+    Persist["Persist Confirmed Booking"]
+    Notify["Send Customer Notification"]
+    Success["Booking Confirmed"]
+
+    Customer --> SelectOffer
+    SelectOffer --> Revalidate
+    Revalidate -->|Valid| PendingBooking
+    PendingBooking --> Payment
+    Payment -->|Successful| ProviderConfirm
+    ProviderConfirm -->|Confirmed| Persist
+    Persist --> Notify
+    Notify --> Success
+
+    Revalidate -->|Invalid or Changed| Customer
+    Payment -->|Failed| Customer
+    ProviderConfirm -->|Rejected| Customer

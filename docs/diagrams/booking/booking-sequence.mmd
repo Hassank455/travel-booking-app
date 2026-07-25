@@ -1,0 +1,51 @@
+sequenceDiagram
+    actor Customer
+    participant API as API Layer
+    participant Booking as Booking Module
+    participant Search as Search Module
+    participant Payment as Payment Module
+    participant Provider as Provider Integration
+    participant DB as Persistence Layer
+    participant Notify as Notification Module
+
+    Customer->>API: Submit booking request with offer reference
+    API->>Booking: Start booking orchestration
+    Booking->>Search: Load offer context
+    Search-->>Booking: Offer snapshot and provider reference
+
+    Booking->>Provider: Revalidate offer
+    Provider-->>Booking: Current price and availability
+
+    alt Offer invalid or changed
+        Booking-->>API: Revalidation failure or updated offer
+        API-->>Customer: Booking cannot continue
+    else Offer valid
+        Booking->>DB: Create pending booking
+        DB-->>Booking: Booking reference
+
+        Booking->>Payment: Authorize or capture payment
+        Payment-->>Booking: Payment result
+
+        alt Payment failed
+            Booking->>DB: Mark booking as payment failed
+            Booking-->>API: Payment failure
+            API-->>Customer: Payment failed
+        else Payment successful
+            Booking->>Provider: Confirm reservation
+            Provider-->>Booking: Provider confirmation result
+
+            alt Provider confirmation failed
+                Booking->>Payment: Initiate refund or void
+                Payment-->>Booking: Compensation accepted
+                Booking->>DB: Mark booking as failed
+                Booking-->>API: Provider confirmation failure
+                API-->>Customer: Booking failed
+            else Provider confirmed
+                Booking->>DB: Store confirmation and mark confirmed
+                Booking-->>API: Confirmed booking
+                API-->>Customer: Booking confirmed
+                Booking-->>Notify: Publish booking confirmed event
+                Notify-->>Customer: Confirmation notification
+            end
+        end
+    end

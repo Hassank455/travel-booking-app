@@ -1,0 +1,26 @@
+flowchart TD
+    Start["Booking Orchestration Step Fails"]
+    RevalidationFailure{"Offer Revalidation Failed?"}
+    PaymentFailure{"Payment Failed?"}
+    ProviderFailure{"Provider Confirmation Failed?"}
+    NotificationFailure{"Notification Failed?"}
+
+    ReturnOfferChange["Return Updated Offer or Availability Error"]
+    MarkPaymentFailed["Mark Booking as Payment Failed"]
+    RefundOrVoid["Refund or Void Successful Payment"]
+    MarkBookingFailed["Mark Booking as Failed"]
+    RetryNotification["Queue Notification Retry"]
+    End["End Orchestration"]
+
+    Start --> RevalidationFailure
+    RevalidationFailure -->|Yes| ReturnOfferChange --> End
+    RevalidationFailure -->|No| PaymentFailure
+
+    PaymentFailure -->|Yes| MarkPaymentFailed --> End
+    PaymentFailure -->|No| ProviderFailure
+
+    ProviderFailure -->|Yes| RefundOrVoid --> MarkBookingFailed --> End
+    ProviderFailure -->|No| NotificationFailure
+
+    NotificationFailure -->|Yes| RetryNotification --> End
+    NotificationFailure -->|No| End
