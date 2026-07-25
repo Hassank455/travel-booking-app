@@ -292,7 +292,6 @@ The system shall record administrative actions for auditing purposes.
 
 The implementation details for these functional capabilities are described in the following documents:
 
-- 06-business-rules.md
 - 08-search-architecture.md
 - 09-booking-orchestration.md
 - 10-caching-strategy.md

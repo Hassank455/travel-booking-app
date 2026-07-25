@@ -333,7 +333,6 @@ The platform includes:
 - Refund-status tracking.
 - Manual review for unresolved cases.
 
-Detailed business rules will be documented in [Business Rules](06-business-rules.md).
 
 ---
 
@@ -808,8 +807,7 @@ Significant changes should be documented through:
 - [User Roles](03-user-roles.md)
 - [Functional Requirements](04-functional-requirements.md)
 - [Non-Functional Requirements](05-non-functional-requirements.md)
-- [Business Rules](06-business-rules.md)
-- [Domain Model](07-domain-model.md)
+- [Domain Model](06-domain-model.md)
 - [Search Architecture](08-search-architecture.md)
 - [Booking Orchestration](09-booking-orchestration.md)
 - [Caching Strategy](10-caching-strategy.md)

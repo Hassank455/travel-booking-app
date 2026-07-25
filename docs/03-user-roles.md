@@ -121,7 +121,6 @@ A Guest cannot:
 
 The MVP may require the Guest to create an account or log in before completing payment or confirming a booking.
 
-The final guest-booking policy will be defined in [Business Rules](06-business-rules.md).
 
 ---
 
@@ -802,8 +801,7 @@ See [Project Scope](02-scope.md) for excluded and future capabilities.
 - [Project Scope](02-scope.md)
 - [Functional Requirements](04-functional-requirements.md)
 - [Non-Functional Requirements](05-non-functional-requirements.md)
-- [Business Rules](06-business-rules.md)
-- [Domain Model](07-domain-model.md)
+- [Domain Model](06-domain-model.md)
 - [Search Architecture](08-search-architecture.md)
 - [Booking Orchestration](09-booking-orchestration.md)
 - [Database Design](11-database-design.md)
