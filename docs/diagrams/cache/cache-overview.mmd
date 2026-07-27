@@ -1,0 +1,28 @@
+flowchart TB
+
+    Client["Client"]
+
+    API["Backend API"]
+
+    Search["Search Service"]
+
+    Redis["Distributed Cache (Redis)"]
+
+    Providers["External Providers"]
+
+    Client --> API
+    API --> Search
+
+    Search --> Redis
+
+    Redis -- Cache Hit --> Search
+
+    Redis -- Cache Miss --> Providers
+
+    Providers --> Search
+
+    Search --> Redis
+
+    Search --> API
+
+    API --> Client

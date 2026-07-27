@@ -1,0 +1,37 @@
+flowchart TB
+
+    Request["Incoming Request"]
+
+    Lookup["Check Cache"]
+
+    Miss["Cache Miss"]
+
+    Source["Load From Source"]
+
+    Store["Store in Cache"]
+
+    Hit["Cache Hit"]
+
+    Return["Return Response"]
+
+    Expire["TTL Expired"]
+
+    Remove["Remove Cache Entry"]
+
+    Request --> Lookup
+
+    Lookup -->|Hit| Hit
+
+    Lookup -->|Miss| Miss
+
+    Miss --> Source
+
+    Source --> Store
+
+    Store --> Return
+
+    Hit --> Return
+
+    Store --> Expire
+
+    Expire --> Remove

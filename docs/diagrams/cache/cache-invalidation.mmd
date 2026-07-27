@@ -1,0 +1,25 @@
+flowchart TB
+
+    Event["Business Event"]
+
+    Decision{"Invalidate Cache?"}
+
+    Remove["Remove Cache Entry"]
+
+    Request["Next Request"]
+
+    Source["Load Fresh Data"]
+
+    Store["Store Updated Cache"]
+
+    Event --> Decision
+
+    Decision -->|Yes| Remove
+
+    Remove --> Request
+
+    Request --> Source
+
+    Source --> Store
+
+    Decision -->|No| Request

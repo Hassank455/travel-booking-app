@@ -1,0 +1,52 @@
+flowchart TB
+
+    Request["Application Request<br/><small>Search, reference, booking, or payment request</small>"]
+
+    Eligibility{"Cache Eligible?"}
+
+    DataType{"Cached Data Type?"}
+
+    subgraph CacheLayers["Cache Layers"]
+        Memory["Application Memory<br/><small>Local configuration and<br/>short-lived lookup data</small>"]
+
+        Redis["Distributed Cache (Redis)<br/><small>Search results, sessions,<br/>reference data, and provider metadata</small>"]
+    end
+
+    subgraph Processing["Data Processing"]
+        Normalize["Normalize and Prepare Data<br/><small>Transform provider or database data<br/>into the platform model</small>"]
+    end
+
+    subgraph AuthoritativeSources["Authoritative Data Sources"]
+        Database["Primary Database<br/><small>Bookings, payments, customers,<br/>transactions, and platform-owned data</small>"]
+
+        Providers["External Providers<br/><small>Flight and hotel inventory,<br/>pricing, and availability</small>"]
+    end
+
+    Response["Return Response"]
+
+    Request --> Eligibility
+
+    Eligibility -->|No — Transactional Data| Database
+    Database --> Response
+
+    Eligibility -->|Yes| DataType
+
+    DataType -->|Local Configuration| Memory
+    Memory -->|Hit| Response
+    Memory -->|Miss| Redis
+
+    DataType -->|Shared Cached Data| Redis
+
+    Redis -->|Hit| Response
+
+    Redis -->|Travel Inventory Miss| Providers
+    Redis -->|Platform or Reference Data Miss| Database
+
+    Providers --> Normalize
+    Database --> Normalize
+
+    Normalize --> Redis
+    Normalize --> Response
+
+    Redis -. Cache unavailable .-> Providers
+    Redis -. Cache unavailable .-> Database
