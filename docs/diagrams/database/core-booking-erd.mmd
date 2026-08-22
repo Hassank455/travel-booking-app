@@ -1,7 +1,66 @@
 erDiagram
 
+    USERS {
+        bigint id PK
+        string email
+        string password_hash
+        string status
+        datetime email_verified_at
+        datetime created_at
+        datetime updated_at
+    }
+
     CUSTOMERS {
         bigint id PK
+        bigint user_id FK
+        string first_name
+        string last_name
+        string phone_number
+        datetime created_at
+        datetime updated_at
+    }
+
+    ROLES {
+        bigint id PK
+        string code
+        string name
+        datetime created_at
+    }
+
+    USER_ROLES {
+        bigint user_id FK
+        bigint role_id FK
+        datetime created_at
+    }
+
+    ADDRESSES {
+        bigint id PK
+        bigint customer_id FK
+        string line1
+        string line2
+        string city
+        string state
+        string postal_code
+        string country_code
+        string type
+        boolean is_default
+        datetime created_at
+        datetime updated_at
+    }
+
+    TRAVELER_PROFILES {
+        bigint id PK
+        bigint customer_id FK
+        string first_name
+        string last_name
+        date date_of_birth
+        string gender
+        string nationality
+        string document_type
+        string document_number
+        date document_expiry
+        datetime created_at
+        datetime updated_at
     }
 
     PROVIDERS {
@@ -133,9 +192,13 @@ erDiagram
         bigint hotel_booking_guest_id FK
     }
 
-    TRAVELER_PROFILES {
-        bigint id PK
-    }
+
+    USERS ||--o| CUSTOMERS : has
+    USERS ||--o{ USER_ROLES : assigned
+    ROLES ||--o{ USER_ROLES : contains
+
+    CUSTOMERS ||--o{ ADDRESSES : has
+    CUSTOMERS ||--o{ TRAVELER_PROFILES : owns
 
     CUSTOMERS ||--o{ FLIGHT_BOOKINGS : creates
     CUSTOMERS ||--o{ HOTEL_BOOKINGS : creates

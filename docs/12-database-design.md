@@ -3834,3 +3834,948 @@ The platform currently adopts the following decisions:
 - Historical bookings remain valid even when a provider is disabled.
 - Provider secrets are not stored in the core provider table.
 - Provider-specific API structures remain inside the integration layer.
+
+---
+
+# 11. User Persistence Design
+
+## 11.1 Overview
+
+`users` represents the identity used to access the Travel Booking Platform.
+
+The User entity is responsible for authentication-related information and account state.
+
+It does not contain booking-specific customer information such as:
+
+- Traveler profiles.
+- Addresses.
+- Booking history.
+- Hotel guests.
+- Flight passengers.
+
+These responsibilities belong to other business entities.
+
+---
+
+## 11.2 Proposed Fields
+
+```text
+users
+
+id
+
+email
+password_hash
+
+status
+
+email_verified_at
+
+created_at
+updated_at
+```
+
+---
+
+## 11.3 Field Definitions
+
+### `id`
+
+**Purpose**
+
+Represents the unique internal identifier of the user account.
+
+**Example**
+
+```text
+user_01J...
+```
+
+---
+
+### `email`
+
+**Purpose**
+
+Represents the primary email used for authentication and account communication.
+
+**Example**
+
+```text
+hassan@example.com
+```
+
+The email should normally be unique.
+
+---
+
+### `password_hash`
+
+**Purpose**
+
+Stores the password hash used for password-based authentication.
+
+The platform must never store the original password.
+
+Example conceptually:
+
+```text
+Password
+    ↓
+Hash
+    ↓
+password_hash
+```
+
+---
+
+### `status`
+
+**Purpose**
+
+Represents the current account state.
+
+Possible values may include:
+
+```text
+ACTIVE
+SUSPENDED
+DISABLED
+PENDING_VERIFICATION
+```
+
+**Example**
+
+```text
+status = ACTIVE
+```
+
+---
+
+### `email_verified_at`
+
+**Purpose**
+
+Represents when the user's email was successfully verified.
+
+**Example**
+
+```text
+2026-08-22T12:00:00Z
+```
+
+A `NULL` value indicates that verification has not yet been completed.
+
+---
+
+### `created_at`
+
+Represents when the user account was created.
+
+---
+
+### `updated_at`
+
+Represents the most recent update to the user account.
+
+---
+
+## 11.4 Architectural Decisions
+
+- Authentication identity is stored separately from the customer profile.
+- Email is treated as a unique identity when email-based authentication is used.
+- Passwords are never stored directly.
+- Account status is represented directly on the user.
+- Authentication provider-specific details may be added later if social login is introduced.
+
+---
+
+# 12. Customer Persistence Design
+
+## 12.1 Overview
+
+`customers` represents the business customer who interacts with the travel platform.
+
+A customer is associated with a user account but belongs to the booking domain rather than the authentication domain.
+
+Conceptually:
+
+```text
+User
+  │
+  └── Customer
+```
+
+The User answers:
+
+> Who can access the system?
+
+The Customer answers:
+
+> Who owns searches, bookings, traveler profiles, and customer data?
+
+---
+
+## 12.2 Proposed Fields
+
+```text
+customers
+
+id
+user_id
+
+first_name
+last_name
+
+phone_number
+
+created_at
+updated_at
+```
+
+---
+
+## 12.3 Field Definitions
+
+### `id`
+
+Unique internal customer identifier.
+
+---
+
+### `user_id`
+
+**Purpose**
+
+References the user account associated with the customer.
+
+Relationship:
+
+```text
+User
+  1
+  │
+  0..1
+Customer
+```
+
+Recommended constraint:
+
+```text
+UNIQUE(user_id)
+```
+
+A user account should not create multiple customer records.
+
+---
+
+### `first_name`
+
+Stores the customer's first name.
+
+**Example**
+
+```text
+Hassan
+```
+
+---
+
+### `last_name`
+
+Stores the customer's family name.
+
+**Example**
+
+```text
+AlMosadder
+```
+
+---
+
+### `phone_number`
+
+Stores the customer's primary contact phone number.
+
+**Example**
+
+```text
++970599123456
+```
+
+---
+
+### `created_at`
+
+Represents when the customer profile was created.
+
+---
+
+### `updated_at`
+
+Represents the latest customer profile update.
+
+---
+
+## 12.4 Customer Relationships
+
+Conceptually:
+
+```text
+Customer
+   │
+   ├── * Addresses
+   ├── * Traveler Profiles
+   ├── * Flight Bookings
+   ├── * Hotel Bookings
+   └── * Transactions
+```
+
+The customer owns the booking relationship but does not necessarily represent the actual passenger or hotel guest.
+
+---
+
+## 12.5 Architectural Decisions
+
+- User identity and customer business profile remain separate.
+- One user currently maps to at most one customer.
+- Customer data does not replace traveler or guest snapshots.
+- Booking history is linked through booking entities rather than duplicated inside the customer table.
+
+---
+
+# 13. Address Persistence Design
+
+## 13.1 Overview
+
+`addresses` stores reusable addresses associated with a customer.
+
+Addresses may later be used for:
+
+- Billing.
+- Customer profile.
+- Payment information.
+- Provider-required contact information.
+
+A customer may have multiple addresses.
+
+---
+
+## 13.2 Proposed Fields
+
+```text
+addresses
+
+id
+customer_id
+
+line1
+line2
+
+city
+state
+postal_code
+country_code
+
+type
+is_default
+
+created_at
+updated_at
+```
+
+---
+
+## 13.3 Field Definitions
+
+### `id`
+
+Unique internal address identifier.
+
+---
+
+### `customer_id`
+
+References the customer who owns the address.
+
+Relationship:
+
+```text
+Customer
+   1
+   │
+   └──── *
+       Address
+```
+
+---
+
+### `line1`
+
+Stores the primary address line.
+
+**Example**
+
+```text
+15 King Street
+```
+
+---
+
+### `line2`
+
+Stores optional additional address information.
+
+**Example**
+
+```text
+Apartment 4B
+```
+
+This field may be `NULL`.
+
+---
+
+### `city`
+
+Stores the city.
+
+**Example**
+
+```text
+Amman
+```
+
+---
+
+### `state`
+
+Stores the state, province, or region when applicable.
+
+**Example**
+
+```text
+Amman Governorate
+```
+
+This field may be optional depending on country.
+
+---
+
+### `postal_code`
+
+Stores the postal or ZIP code when applicable.
+
+---
+
+### `country_code`
+
+Stores the normalized country code.
+
+Recommended example:
+
+```text
+JO
+PS
+AE
+US
+```
+
+Using country codes is preferable to storing inconsistent free-text country names.
+
+---
+
+### `type`
+
+Represents the address purpose.
+
+Possible values:
+
+```text
+HOME
+BILLING
+OTHER
+```
+
+This field may initially remain optional if the platform does not yet need address classification.
+
+---
+
+### `is_default`
+
+Indicates whether this is the customer's preferred/default address.
+
+**Example**
+
+```text
+is_default = true
+```
+
+---
+
+### `created_at`
+
+Represents when the address was created.
+
+---
+
+### `updated_at`
+
+Represents the latest address update.
+
+---
+
+## 13.4 Architectural Decisions
+
+- Addresses belong to customers rather than authentication users.
+- One customer may have multiple addresses.
+- Country values should use normalized codes.
+- Address functionality remains reusable and independent from historical booking snapshots.
+- Booking-specific address snapshots may be introduced later only if business requirements require preserving the exact billing/contact address used at booking time.
+
+---
+
+# 14. Traveler Profile Persistence Design
+
+## 14.1 Overview
+
+`traveler_profiles` stores reusable traveler information owned by a customer.
+
+Its purpose is to avoid repeatedly entering the same traveler information during future bookings.
+
+Examples:
+
+```text
+Customer Hassan
+   │
+   ├── Hassan
+   ├── Ahmed
+   ├── Sara
+   └── Ali
+```
+
+A traveler profile is **not** the historical passenger or guest record.
+
+During booking, the relevant information is copied into:
+
+```text
+flight_booking_passengers
+```
+
+or:
+
+```text
+hotel_booking_guests
+```
+
+as an immutable snapshot.
+
+---
+
+## 14.2 Proposed Fields
+
+```text
+traveler_profiles
+
+id
+customer_id
+
+first_name
+last_name
+
+date_of_birth
+gender
+nationality
+
+document_type
+document_number
+document_expiry
+
+created_at
+updated_at
+```
+
+---
+
+## 14.3 Field Definitions
+
+### `id`
+
+Unique internal identifier of the traveler profile.
+
+---
+
+### `customer_id`
+
+References the customer who owns the reusable traveler profile.
+
+Relationship:
+
+```text
+Customer
+   1
+   │
+   └──── *
+     TravelerProfile
+```
+
+---
+
+### `first_name`
+
+Stores the traveler's first name.
+
+---
+
+### `last_name`
+
+Stores the traveler's family name.
+
+---
+
+### `date_of_birth`
+
+Stores the traveler's birth date.
+
+This value is important for determining:
+
+```text
+ADULT
+CHILD
+INFANT
+```
+
+according to provider rules.
+
+---
+
+### `gender`
+
+Stores gender when required for provider or travel-document purposes.
+
+This field may be optional.
+
+---
+
+### `nationality`
+
+Stores the traveler's nationality using a normalized country code where possible.
+
+**Example**
+
+```text
+PS
+```
+
+---
+
+### `document_type`
+
+Represents the saved travel document type.
+
+Examples:
+
+```text
+PASSPORT
+NATIONAL_ID
+```
+
+---
+
+### `document_number`
+
+Stores the reusable travel-document number.
+
+This information is sensitive and must be protected appropriately.
+
+---
+
+### `document_expiry`
+
+Stores the document expiration date.
+
+---
+
+### `created_at`
+
+Represents when the traveler profile was created.
+
+---
+
+### `updated_at`
+
+Represents the latest update to the reusable traveler information.
+
+---
+
+## 14.4 Traveler Profile vs Booking Snapshot
+
+This distinction is critical.
+
+```text
+Traveler Profile
+        ↓
+Reusable Data
+        ↓
+Booking Created
+        ↓
+Passenger / Guest Snapshot
+```
+
+Example:
+
+```text
+traveler_profiles
+
+Passport = P111111
+```
+
+Booking created:
+
+```text
+flight_booking_passengers
+
+Passport = P111111
+```
+
+Later the customer updates:
+
+```text
+traveler_profiles
+
+Passport = P999999
+```
+
+The historical booking remains:
+
+```text
+flight_booking_passengers
+
+Passport = P111111
+```
+
+---
+
+## 14.5 Architectural Decisions
+
+- Traveler profiles are reusable customer-owned data.
+- Traveler profiles are not historical booking records.
+- Flight passengers and hotel guests store independent snapshots.
+- A customer may maintain multiple traveler profiles.
+- Sensitive travel-document information must be protected.
+- Updating a traveler profile never updates historical bookings.
+
+---
+
+# 15. Roles and User Roles Persistence Design
+
+## 15.1 Overview
+
+The platform uses role-based access control to assign permissions to users.
+
+The initial design uses:
+
+```text
+roles
+user_roles
+```
+
+instead of introducing both:
+
+```text
+user_type
+```
+
+and:
+
+```text
+role
+```
+
+without a clear business distinction.
+
+This avoids unnecessary duplication.
+
+---
+
+## 15.2 `roles`
+
+### Proposed Fields
+
+```text
+roles
+
+id
+code
+name
+
+created_at
+```
+
+---
+
+### `id`
+
+Unique internal identifier of the role.
+
+---
+
+### `code`
+
+Stores a stable application role code.
+
+Examples:
+
+```text
+CUSTOMER
+ADMIN
+SUPPORT
+FINANCE
+```
+
+The code is intended for internal permission checks.
+
+---
+
+### `name`
+
+Stores a human-readable role name.
+
+Examples:
+
+```text
+Customer
+Administrator
+Support Agent
+Finance Officer
+```
+
+---
+
+### `created_at`
+
+Represents when the role was created.
+
+---
+
+## 15.3 `user_roles`
+
+`user_roles` represents the many-to-many relationship between users and roles.
+
+### Proposed Fields
+
+```text
+user_roles
+
+user_id
+role_id
+
+created_at
+```
+
+Relationship:
+
+```text
+User
+  *
+  │
+  *
+Role
+```
+
+A user may therefore hold more than one role.
+
+Example:
+
+```text
+User #15
+├── SUPPORT
+└── ADMIN
+```
+
+---
+
+## 15.4 Constraints
+
+The pair:
+
+```text
+user_id + role_id
+```
+
+should be unique.
+
+This prevents duplicate role assignments.
+
+Conceptually:
+
+```text
+UNIQUE(user_id, role_id)
+```
+
+---
+
+## 15.5 Why No `user_type` Table?
+
+A separate `user_type` table is not currently required because roles already express the user's authorization context.
+
+For example:
+
+```text
+CUSTOMER
+ADMIN
+SUPPORT
+```
+
+can already be represented using `roles`.
+
+Introducing both:
+
+```text
+USER_TYPE = ADMIN
+ROLE = ADMIN
+```
+
+would duplicate the same business meaning.
+
+A separate user type should only be introduced later if the domain discovers a genuinely different concept that cannot be represented using roles.
+
+---
+
+## 15.6 Permissions
+
+The initial design does not require a dedicated `permissions` table.
+
+For the current scope:
+
+```text
+roles
++
+application authorization rules
+```
+
+may be sufficient.
+
+If access control becomes more complex later, the model can evolve into:
+
+```text
+roles
+permissions
+role_permissions
+user_roles
+```
+
+without changing the existing user/customer model.
+
+---
+
+## 15.7 Architectural Decisions
+
+- The platform uses RBAC for authorization.
+- `roles` and `user_roles` are sufficient for the initial model.
+- `user_type` is not introduced without a distinct business meaning.
+- One user may hold multiple roles.
+- Role assignment is independent from customer profile creation.
+- Fine-grained permissions may be introduced later if required.
+
+---
