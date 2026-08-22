@@ -1461,3 +1461,2376 @@ For hotel booking persistence, the platform currently adopts the following decis
 - Provider identifiers use generic platform field names.
 - Check-in and check-out dates belong directly to the hotel booking.
 - The hotel persistence model remains independent from LiteAPI-specific schema terminology.
+
+---
+
+# 5. Transaction Persistence Design
+
+## 5.1 Overview
+
+`transactions` represents the financial transaction associated with a flight or hotel booking.
+
+The transaction lifecycle is independent from the booking lifecycle.
+
+A booking may be:
+
+```text
+PENDING
+CONFIRMED
+FAILED
+CANCELLED
+```
+
+while the transaction may independently be:
+
+```text
+PENDING
+AUTHORIZED
+SUCCEEDED
+FAILED
+CANCELLED
+```
+
+This separation is important because:
+
+```text
+Payment Success
+≠
+Booking Confirmation
+```
+
+For example, a payment may succeed while provider booking confirmation is still pending.
+
+The current business decision is:
+
+```text
+One Booking
+    ↓
+One Transaction
+```
+
+The transaction is therefore referenced by the booking using a reverse foreign key.
+
+---
+
+## 5.2 `transactions`
+
+### Proposed Fields
+
+```text
+transactions
+
+id
+customer_id
+
+provider_id
+provider_transaction_reference
+
+status
+payment_method
+
+amount
+currency
+
+authorized_at
+completed_at
+
+created_at
+updated_at
+```
+
+---
+
+# 5.3 Field Definitions
+
+## `id`
+
+**Purpose**
+
+Represents the unique internal identifier of the transaction inside our platform.
+
+This identifier is independent from the external payment provider.
+
+**Example**
+
+```text
+txn_01J8Y5M8KQ...
+```
+
+or:
+
+```text
+74102
+```
+
+depending on the selected platform identifier strategy.
+
+Conceptually:
+
+```text
+Platform Transaction ID
+≠
+Payment Provider Transaction ID
+```
+
+---
+
+## `customer_id`
+
+**Purpose**
+
+References the customer responsible for the transaction.
+
+This makes the transaction directly traceable to the customer who initiated the booking.
+
+**Example**
+
+```text
+customer_id = 1842
+```
+
+Relationship:
+
+```text
+Customer
+   1
+   │
+   └──── *
+      Transaction
+```
+
+A customer may therefore have many transactions over time.
+
+---
+
+## `provider_id`
+
+**Purpose**
+
+Identifies the external payment provider used to process the transaction.
+
+The field remains generic so the database does not depend on a specific payment gateway.
+
+For example:
+
+```text
+providers
+
+1 → Duffel
+2 → LiteAPI
+3 → Stripe
+```
+
+A transaction may use:
+
+```text
+provider_id = 3
+```
+
+to indicate that Stripe processed the payment.
+
+Depending on the final provider model, travel providers and payment providers may later be separated by provider type or capability.
+
+---
+
+## `provider_transaction_reference`
+
+**Purpose**
+
+Stores the primary transaction identifier assigned by the external payment provider.
+
+This identifier is used for:
+
+- Reconciliation.
+- Payment lookup.
+- Customer support.
+- Payment status synchronization.
+- Failure investigation.
+
+**Example**
+
+```text
+provider_transaction_reference = pi_3Qx8...
+```
+
+or another identifier returned by the selected payment provider.
+
+The field is intentionally named:
+
+```text
+provider_transaction_reference
+```
+
+rather than:
+
+```text
+stripe_payment_intent_id
+```
+
+to preserve provider independence.
+
+---
+
+## `status`
+
+**Purpose**
+
+Represents the current financial state of the transaction inside the platform.
+
+Possible values may include:
+
+```text
+PENDING
+AUTHORIZED
+SUCCEEDED
+FAILED
+CANCELLED
+```
+
+**Example**
+
+```text
+status = SUCCEEDED
+```
+
+The platform status should be normalized.
+
+External gateway-specific states should be mapped through the payment integration layer.
+
+Conceptually:
+
+```text
+Payment Provider Status
+        ↓
+Payment Adapter
+        ↓
+Platform Transaction Status
+```
+
+---
+
+## `payment_method`
+
+**Purpose**
+
+Represents the payment method selected for the transaction.
+
+Examples may include:
+
+```text
+CARD
+WALLET
+BANK_TRANSFER
+PAY_AT_PROPERTY
+```
+
+**Example**
+
+```text
+payment_method = CARD
+```
+
+The exact supported methods depend on platform and provider capabilities.
+
+This field describes the business payment method rather than gateway-specific implementation details.
+
+---
+
+## `amount`
+
+**Purpose**
+
+Stores the amount associated with the transaction.
+
+This amount must match the amount approved by the customer.
+
+**Example**
+
+```text
+amount = 420.50
+```
+
+The physical database schema should later use a precise decimal representation.
+
+---
+
+## `currency`
+
+**Purpose**
+
+Stores the currency associated with the transaction amount.
+
+**Example**
+
+```text
+currency = USD
+```
+
+The combination:
+
+```text
+amount + currency
+```
+
+must always be interpreted together.
+
+For example:
+
+```text
+420 USD
+```
+
+is not equivalent to:
+
+```text
+420 EUR
+```
+
+---
+
+## `authorized_at`
+
+**Purpose**
+
+Represents the time at which the payment provider successfully authorized the transaction when authorization is part of the payment flow.
+
+**Example**
+
+```text
+authorized_at = 2026-08-16T06:15:10Z
+```
+
+This value may be `NULL` when:
+
+- Authorization is not used.
+- Authorization failed.
+- The payment provider uses immediate capture.
+
+---
+
+## `completed_at`
+
+**Purpose**
+
+Represents the time at which the transaction reached a successful final financial state.
+
+For a standard card payment this may correspond to successful capture or payment completion.
+
+**Example**
+
+```text
+completed_at = 2026-08-16T06:15:12Z
+```
+
+Conceptually:
+
+```text
+created_at
+→ Transaction started
+
+authorized_at
+→ Funds authorized
+
+completed_at
+→ Financial operation completed
+```
+
+Not every payment method requires all three stages.
+
+---
+
+## `created_at`
+
+**Purpose**
+
+Represents when the transaction record was created in the platform.
+
+The transaction may initially have:
+
+```text
+status = PENDING
+```
+
+**Example**
+
+```text
+created_at = 2026-08-16T06:15:08Z
+```
+
+---
+
+## `updated_at`
+
+**Purpose**
+
+Represents the most recent modification of the transaction record.
+
+Updates may occur because of:
+
+- Authorization.
+- Payment completion.
+- Payment failure.
+- Provider callback.
+- Reconciliation.
+- Manual operational correction.
+
+**Example**
+
+```text
+updated_at = 2026-08-16T06:15:12Z
+```
+
+---
+
+# 5.4 Booking Relationship
+
+The transaction does not contain:
+
+```text
+flight_booking_id
+hotel_booking_id
+```
+
+Instead, each booking references its transaction.
+
+Conceptually:
+
+```text
+transactions
+     ▲
+     │
+     │ UNIQUE FK
+     │
+flight_bookings.transaction_id
+```
+
+or:
+
+```text
+transactions
+     ▲
+     │
+     │ UNIQUE FK
+     │
+hotel_bookings.transaction_id
+```
+
+This is the **Reverse Foreign Key** approach.
+
+It avoids a polymorphic relationship such as:
+
+```text
+transactions
+
+booking_type
+booking_id
+```
+
+and also avoids nullable foreign keys such as:
+
+```text
+flight_booking_id
+hotel_booking_id
+```
+
+inside the transaction table.
+
+---
+
+## Why Reverse Foreign Key?
+
+The relationship is currently:
+
+```text
+One Booking
+↔
+One Transaction
+```
+
+Therefore the booking owns the reference to its transaction.
+
+For example:
+
+```text
+flight_bookings
+
+id = 1001
+transaction_id = 74102
+```
+
+and:
+
+```text
+transactions
+
+id = 74102
+status = SUCCEEDED
+amount = 420.50
+currency = USD
+```
+
+The same transaction ID should not be used by another booking.
+
+Recommended constraint:
+
+```text
+UNIQUE(transaction_id)
+```
+
+inside each booking table.
+
+---
+
+# 5.5 Flight Booking Example
+
+```text
+flight_bookings
+
+id                          = 1001
+customer_id                 = 1842
+transaction_id              = 74102
+provider_id                 = Duffel
+provider_booking_reference  = ord_123...
+status                      = CONFIRMED
+```
+
+Transaction:
+
+```text
+transactions
+
+id                              = 74102
+customer_id                     = 1842
+provider_id                     = Payment Provider
+provider_transaction_reference  = pi_123...
+status                          = SUCCEEDED
+payment_method                  = CARD
+amount                          = 420.50
+currency                        = USD
+```
+
+Conceptually:
+
+```text
+Flight Booking
+       │
+       │ transaction_id
+       ▼
+Transaction
+```
+
+---
+
+# 5.6 Hotel Booking Example
+
+```text
+hotel_bookings
+
+id                          = 2001
+customer_id                 = 1842
+transaction_id              = 75119
+provider_id                 = LiteAPI
+provider_booking_reference  = booking_...
+status                      = CONFIRMED
+```
+
+Transaction:
+
+```text
+transactions
+
+id                              = 75119
+customer_id                     = 1842
+provider_id                     = Payment Provider
+provider_transaction_reference  = pi_456...
+status                          = SUCCEEDED
+payment_method                  = CARD
+amount                          = 685.00
+currency                        = USD
+```
+
+---
+
+# 5.7 Transaction vs Booking Status
+
+Booking and transaction statuses must remain independent.
+
+For example:
+
+```text
+Transaction = SUCCEEDED
+Booking     = PROCESSING
+```
+
+is a valid temporary state.
+
+Another example:
+
+```text
+Transaction = FAILED
+Booking     = PENDING
+```
+
+may indicate that the customer can retry payment before the booking expires.
+
+The platform must not assume:
+
+```text
+Transaction SUCCEEDED
+        =
+Booking CONFIRMED
+```
+
+Provider confirmation remains part of the booking lifecycle.
+
+---
+
+# 5.8 Transaction Snapshot
+
+The transaction stores the financial facts accepted during the operation.
+
+At minimum, the snapshot includes:
+
+```text
+amount
+currency
+payment_method
+provider_transaction_reference
+transaction status
+transaction timestamps
+```
+
+These values must remain traceable even if:
+
+- Payment provider configuration changes.
+- Customer payment preferences change.
+- Booking details later change through an approved workflow.
+
+---
+
+# 5.9 No Refund Model in Initial Scope
+
+The current platform scope does not include a dedicated refund persistence model.
+
+Therefore the initial design does not introduce:
+
+```text
+refunds
+```
+
+or refund-specific transaction relationships.
+
+If refund functionality becomes part of the product scope later, it should be introduced as a separate financial lifecycle rather than overloading the existing transaction status.
+
+---
+
+# 5.10 Provider Independence
+
+The transaction model must remain independent from the selected payment provider.
+
+Conceptual mapping:
+
+```text
+External Payment Provider          Platform
+
+payment/payment-intent ID      →   provider_transaction_reference
+provider payment state         →   status
+provider method                →   payment_method
+payment amount                 →   amount
+payment currency               →   currency
+```
+
+Provider-specific fields should remain inside the payment integration layer unless there is a strong business reason to persist them.
+
+---
+
+# 5.11 Architectural Decisions
+
+For transaction persistence, the platform currently adopts the following decisions:
+
+- The entity remains named `Transaction`.
+- One booking currently has exactly one transaction.
+- Flight and hotel bookings reference their transaction using reverse foreign keys.
+- `transaction_id` is unique within a booking relationship.
+- Transaction status is independent from booking status.
+- Transaction identifiers remain independent from payment-provider-specific naming.
+- Amount and currency are preserved as historical financial data.
+- Provider transaction references are stored for reconciliation.
+- Refund persistence is outside the initial scope.
+- Polymorphic booking references are avoided for financial relationships.
+
+---
+
+# 6. Flight Booking Passengers
+
+## 6.1 Overview
+
+`flight_booking_passengers` stores the passenger information associated with a confirmed flight booking.
+
+This table represents a **booking-specific passenger snapshot** rather than the customer's reusable traveler profile.
+
+The purpose of this table is to preserve the exact passenger information used during the booking process, even if the customer later updates their saved traveler profiles.
+
+Each flight booking may contain one or more passengers.
+
+Examples include:
+
+- Single traveler
+- Couple
+- Family
+- Group booking
+
+---
+
+## 6.2 Why a Separate Table?
+
+Passenger information should not be stored directly inside `flight_bookings` because:
+
+- A booking may contain multiple passengers.
+- Each passenger has independent personal information.
+- Passenger information may include travel documents.
+- Passenger information should remain normalized.
+
+More importantly, passenger information must remain historically accurate.
+
+For example:
+
+```text
+Traveler Profile
+
+Passport Number = A123456
+```
+
+After one year:
+
+```text
+Traveler Profile
+
+Passport Number = B987654
+```
+
+The historical booking must still contain:
+
+```text
+Passport Number = A123456
+```
+
+Therefore, the booking stores its own immutable passenger snapshot.
+
+---
+
+## 6.3 Proposed Fields
+
+```text
+flight_booking_passengers
+
+id
+
+flight_booking_id
+
+traveler_profile_id (optional)
+
+first_name
+last_name
+
+date_of_birth
+
+passenger_type
+
+gender
+
+nationality
+
+document_type
+document_number
+document_expiry
+
+created_at
+```
+
+---
+
+## 6.4 Field Definitions
+
+### `id`
+
+**Purpose**
+
+Unique internal identifier of the booking passenger record.
+
+Each passenger inside a booking has its own identifier.
+
+**Example**
+
+```text
+fbp_01J9....
+```
+
+---
+
+### `flight_booking_id`
+
+**Purpose**
+
+References the flight booking to which the passenger belongs.
+
+Relationship:
+
+```text
+FlightBooking
+    1
+    │
+    └──── *
+         FlightBookingPassenger
+```
+
+A booking may therefore contain multiple passenger records.
+
+---
+
+### `traveler_profile_id`
+
+**Purpose**
+
+Optionally references the reusable traveler profile used when creating the booking.
+
+This field exists only for convenience.
+
+The booking must never depend on the traveler profile remaining unchanged.
+
+If the traveler profile is deleted or updated, the booking snapshot remains valid.
+
+Example:
+
+```text
+traveler_profile_id = 52
+```
+
+This field may be NULL.
+
+---
+
+### `first_name`
+
+**Purpose**
+
+Stores the passenger's given name exactly as submitted during booking.
+
+Example:
+
+```text
+Ahmed
+```
+
+---
+
+### `last_name`
+
+**Purpose**
+
+Stores the passenger's family name.
+
+Example:
+
+```text
+Mohammad
+```
+
+---
+
+### `date_of_birth`
+
+**Purpose**
+
+Stores the passenger's birth date.
+
+Many airlines require this information during booking.
+
+Example:
+
+```text
+1998-05-14
+```
+
+---
+
+### `passenger_type`
+
+**Purpose**
+
+Represents the passenger category.
+
+Possible values:
+
+```text
+ADULT
+CHILD
+INFANT
+```
+
+Example:
+
+```text
+ADULT
+```
+
+---
+
+### `gender`
+
+**Purpose**
+
+Stores the passenger gender only when required by the airline or provider.
+
+Example:
+
+```text
+MALE
+FEMALE
+```
+
+---
+
+### `nationality`
+
+**Purpose**
+
+Stores the passenger nationality when required for ticket issuance or travel regulations.
+
+Example:
+
+```text
+PS
+```
+
+---
+
+### `document_type`
+
+**Purpose**
+
+Represents the travel document type used during booking.
+
+Examples:
+
+```text
+PASSPORT
+
+NATIONAL_ID
+```
+
+---
+
+### `document_number`
+
+**Purpose**
+
+Stores the document number used during booking.
+
+Example:
+
+```text
+P12345678
+```
+
+---
+
+### `document_expiry`
+
+**Purpose**
+
+Stores the expiration date of the travel document.
+
+Example:
+
+```text
+2032-08-01
+```
+
+---
+
+### `created_at`
+
+**Purpose**
+
+Represents when the passenger snapshot was created.
+
+Since the snapshot never changes, an `updated_at` field is not initially required.
+
+---
+
+## 6.5 Snapshot Principle
+
+Passenger information stored in this table represents the booking at confirmation time.
+
+Future changes to:
+
+- Traveler profile
+- Passport
+- Nationality
+
+must not modify historical booking records.
+
+Conceptually:
+
+```text
+Traveler Profile
+        │
+        ▼
+Booking Created
+        │
+        ▼
+Passenger Snapshot
+        │
+        ▼
+Traveler Updated
+        │
+        ▼
+Snapshot remains unchanged
+```
+
+---
+
+## 6.6 Architectural Decisions
+
+The platform currently adopts the following decisions:
+
+- Passenger information is stored separately from the booking.
+- Passenger information is stored as an immutable snapshot.
+- Traveler profiles are optional references.
+- Historical booking records never depend on reusable traveler profiles.
+- A flight booking may contain multiple passengers.
+
+---
+
+# 7. Flight Segments
+
+## 7.1 Overview
+
+`flight_segments` stores the itinerary associated with a confirmed flight booking.
+
+A flight itinerary may contain one or more flight segments.
+
+Examples:
+
+- Non-stop flight
+- One connection
+- Multiple connections
+
+Each segment represents one physical flight operated by an airline.
+
+---
+
+## 7.2 Why a Separate Table?
+
+Flight information should not be duplicated inside `flight_bookings`.
+
+A booking may contain:
+
+- One segment
+- Two segments
+- Four or more segments
+
+Separating segments keeps the persistence model normalized and allows unlimited itinerary complexity.
+
+---
+
+## 7.3 Proposed Fields
+
+```text
+flight_segments
+
+id
+
+flight_booking_id
+
+segment_order
+
+origin_iata_code
+destination_iata_code
+
+departure_at
+arrival_at
+
+marketing_carrier
+operating_carrier
+
+flight_number
+
+cabin_class
+
+booking_class
+
+created_at
+```
+
+---
+
+## 7.4 Field Definitions
+
+### `id`
+
+**Purpose**
+
+Unique internal identifier of the flight segment.
+
+---
+
+### `flight_booking_id`
+
+**Purpose**
+
+References the booking that owns this segment.
+
+Relationship:
+
+```text
+FlightBooking
+    1
+    │
+    └──── *
+        FlightSegment
+```
+
+---
+
+### `segment_order`
+
+**Purpose**
+
+Represents the order of the segment within the itinerary.
+
+Example:
+
+```text
+1
+```
+
+First flight.
+
+```text
+2
+```
+
+Second connection.
+
+This guarantees the itinerary can always be reconstructed.
+
+---
+
+### `origin_iata_code`
+
+**Purpose**
+
+Stores the departure airport.
+
+Example:
+
+```text
+AMM
+```
+
+---
+
+### `destination_iata_code`
+
+**Purpose**
+
+Stores the arrival airport.
+
+Example:
+
+```text
+DXB
+```
+
+---
+
+### `departure_at`
+
+**Purpose**
+
+Stores the scheduled departure timestamp.
+
+Example:
+
+```text
+2026-08-20T10:30:00Z
+```
+
+---
+
+### `arrival_at`
+
+**Purpose**
+
+Stores the scheduled arrival timestamp.
+
+Example:
+
+```text
+2026-08-20T14:15:00Z
+```
+
+---
+
+### `marketing_carrier`
+
+**Purpose**
+
+Represents the airline that marketed the flight.
+
+Example:
+
+```text
+EK
+```
+
+---
+
+### `operating_carrier`
+
+**Purpose**
+
+Represents the airline that actually operates the flight.
+
+These values may differ during codeshare flights.
+
+Example:
+
+```text
+Marketing Carrier = EK
+
+Operating Carrier = QF
+```
+
+---
+
+### `flight_number`
+
+**Purpose**
+
+Stores the airline flight number.
+
+Example:
+
+```text
+EK903
+```
+
+---
+
+### `cabin_class`
+
+**Purpose**
+
+Represents the cabin booked by the passenger.
+
+Examples:
+
+```text
+ECONOMY
+PREMIUM_ECONOMY
+BUSINESS
+FIRST
+```
+
+---
+
+### `booking_class`
+
+**Purpose**
+
+Represents the airline fare booking class.
+
+Example:
+
+```text
+Y
+
+J
+
+C
+```
+
+This value is different from Cabin Class.
+
+For example:
+
+```text
+Cabin = ECONOMY
+
+Booking Class = Y
+```
+
+---
+
+### `created_at`
+
+Represents when the segment snapshot was created.
+
+---
+
+## 7.5 Segment Snapshot
+
+Each segment represents the itinerary confirmed during booking.
+
+Future schedule changes from the provider must not overwrite the historical booking itinerary.
+
+The booking always preserves what the customer originally accepted.
+
+---
+
+## 7.6 Architectural Decisions
+
+The platform currently adopts the following decisions:
+
+- Flight segments are stored separately from the booking.
+- A booking may contain any number of flight segments.
+- The itinerary remains normalized.
+- Segment ordering is explicitly stored.
+- Codeshare flights are supported.
+- Flight segment data represents a historical booking snapshot.
+
+---
+
+# 8. Hotel Booking Guests
+
+## 8.1 Overview
+
+`hotel_booking_guests` stores the guest information associated with a confirmed hotel booking.
+
+This table represents a **booking-specific guest snapshot**.
+
+It is separate from reusable traveler profiles because the historical booking must preserve the exact guest information used at booking time.
+
+A hotel booking may contain:
+
+- One guest.
+- Multiple guests.
+- Multiple rooms with different guest allocations.
+
+---
+
+## 8.2 Why a Separate Table?
+
+Guest information should not be stored directly inside `hotel_bookings` because:
+
+- A booking may contain multiple guests.
+- Guests may be assigned to different rooms.
+- Guest information must remain historically accurate.
+- A guest may not have a reusable traveler profile.
+- A customer may create a hotel booking for someone else.
+
+For example:
+
+```text
+Customer
+Hassan
+   │
+   └── Hotel Booking
+         ├── Ahmed
+         └── Sara
+```
+
+The customer who owns the booking does not have to be one of the guests.
+
+---
+
+## 8.3 Proposed Fields
+
+```text
+hotel_booking_guests
+
+id
+
+hotel_booking_id
+traveler_profile_id (optional)
+
+first_name
+last_name
+
+email
+phone_number
+
+date_of_birth (optional)
+
+guest_type
+
+is_primary_guest
+
+created_at
+```
+
+---
+
+## 8.4 Field Definitions
+
+### `id`
+
+**Purpose**
+
+Represents the unique internal identifier of the guest snapshot.
+
+**Example**
+
+```text
+hbg_01J9...
+```
+
+---
+
+### `hotel_booking_id`
+
+**Purpose**
+
+References the hotel booking that owns this guest.
+
+Relationship:
+
+```text
+HotelBooking
+    1
+    │
+    └──── *
+       HotelBookingGuest
+```
+
+A hotel booking may therefore contain multiple guest records.
+
+---
+
+### `traveler_profile_id`
+
+**Purpose**
+
+Optionally references the reusable traveler profile from which the guest information was copied.
+
+This relationship is only a convenience reference.
+
+The historical booking must never depend on future changes to the traveler profile.
+
+**Example**
+
+```text
+traveler_profile_id = 72
+```
+
+This field may be `NULL`.
+
+---
+
+### `first_name`
+
+**Purpose**
+
+Stores the guest's first name exactly as submitted during booking.
+
+**Example**
+
+```text
+Ahmed
+```
+
+---
+
+### `last_name`
+
+**Purpose**
+
+Stores the guest's family name.
+
+**Example**
+
+```text
+Mohammad
+```
+
+---
+
+### `email`
+
+**Purpose**
+
+Stores the guest email address when required by the hotel provider.
+
+A provider may require contact information for the primary guest.
+
+**Example**
+
+```text
+ahmed@example.com
+```
+
+This field may be optional depending on provider requirements.
+
+---
+
+### `phone_number`
+
+**Purpose**
+
+Stores the guest contact phone number when required.
+
+**Example**
+
+```text
++970599123456
+```
+
+This field may be optional.
+
+---
+
+### `date_of_birth`
+
+**Purpose**
+
+Stores the guest date of birth when required for age validation or hotel policy.
+
+**Example**
+
+```text
+1995-04-12
+```
+
+This field may be `NULL` when the provider does not require it.
+
+---
+
+### `guest_type`
+
+**Purpose**
+
+Represents the guest category.
+
+Possible values may include:
+
+```text
+ADULT
+CHILD
+```
+
+**Example**
+
+```text
+guest_type = ADULT
+```
+
+The exact age boundaries may depend on the hotel provider or property rules.
+
+---
+
+### `is_primary_guest`
+
+**Purpose**
+
+Identifies the guest responsible for the reservation and check-in.
+
+Every hotel booking should normally have one primary guest.
+
+**Example**
+
+```text
+is_primary_guest = true
+```
+
+Business rule:
+
+```text
+One Hotel Booking
+      ↓
+Exactly One Primary Guest
+```
+
+unless the provider supports a different model.
+
+---
+
+### `created_at`
+
+**Purpose**
+
+Represents when the guest snapshot was created.
+
+Because this record represents historical booking data, it should not normally be modified after confirmation.
+
+---
+
+## 8.5 Guest Snapshot Principle
+
+The guest record is a historical snapshot.
+
+For example:
+
+```text
+Traveler Profile
+Ahmed Mohammad
+email: old@example.com
+        ↓
+Booking Created
+        ↓
+Hotel Booking Guest Snapshot
+Ahmed Mohammad
+email: old@example.com
+        ↓
+Traveler Profile Updated
+email: new@example.com
+        ↓
+Historical Booking Remains
+email: old@example.com
+```
+
+This ensures previous reservations remain accurate.
+
+---
+
+## 8.6 Relationship to Rooms
+
+Guests may later be assigned to hotel rooms.
+
+Conceptually:
+
+```text
+HotelBooking
+    │
+    ├── HotelBookingRoom 1
+    │      ├── Guest A
+    │      └── Guest B
+    │
+    └── HotelBookingRoom 2
+           └── Guest C
+```
+
+The exact room-to-guest relationship will be finalized together with `hotel_booking_rooms`.
+
+---
+
+## 8.7 Architectural Decisions
+
+The platform currently adopts the following decisions:
+
+- Hotel guests are stored separately from the main booking.
+- Guest information is stored as a booking-specific snapshot.
+- Traveler profile references are optional.
+- A customer does not have to be one of the hotel guests.
+- Hotel bookings support multiple guests.
+- A primary guest is explicitly identified.
+- Historical guest data remains unchanged after booking confirmation.
+
+---
+
+# 9. Hotel Booking Rooms
+
+## 9.1 Overview
+
+`hotel_booking_rooms` stores the room and rate information associated with a confirmed hotel booking.
+
+A hotel booking may contain:
+
+- One room.
+- Multiple rooms.
+- Different room types.
+- Different occupancy configurations.
+
+The room record preserves the exact accommodation and commercial terms accepted by the customer.
+
+---
+
+## 9.2 Why a Separate Table?
+
+Room information should not be stored directly in `hotel_bookings` because one booking may contain multiple rooms.
+
+For example:
+
+```text
+Hotel Booking
+
+Room 1
+- Deluxe King
+- 2 Adults
+
+Room 2
+- Twin Room
+- 1 Adult + 1 Child
+```
+
+Storing rooms separately keeps the model normalized and supports multi-room bookings.
+
+---
+
+## 9.3 Proposed Fields
+
+```text
+hotel_booking_rooms
+
+id
+
+hotel_booking_id
+
+provider_room_reference
+provider_rate_reference
+
+room_name
+room_type
+
+rate_name
+meal_plan
+
+adult_count
+child_count
+
+room_amount
+currency
+
+cancellation_policy
+
+created_at
+```
+
+---
+
+## 9.4 Field Definitions
+
+### `id`
+
+**Purpose**
+
+Represents the unique internal identifier of the booked room record.
+
+---
+
+### `hotel_booking_id`
+
+**Purpose**
+
+References the hotel booking that owns the room.
+
+Relationship:
+
+```text
+HotelBooking
+    1
+    │
+    └──── *
+       HotelBookingRoom
+```
+
+---
+
+### `provider_room_reference`
+
+**Purpose**
+
+Stores the provider's identifier for the selected room when available.
+
+The platform uses a generic field name instead of a LiteAPI-specific name.
+
+**Example**
+
+```text
+provider_room_reference = room_87321
+```
+
+This reference is useful for:
+
+- Support.
+- Reconciliation.
+- Provider tracing.
+
+---
+
+### `provider_rate_reference`
+
+**Purpose**
+
+Stores the external identifier of the booked hotel rate.
+
+A hotel room may have multiple rates with different:
+
+- Prices.
+- Meal plans.
+- Cancellation policies.
+- Payment conditions.
+
+Therefore the room identity and rate identity should remain separate.
+
+**Example**
+
+```text
+provider_rate_reference = rate_98124
+```
+
+---
+
+### `room_name`
+
+**Purpose**
+
+Stores the room name displayed and accepted by the customer.
+
+**Example**
+
+```text
+Deluxe King Room
+```
+
+This is part of the historical booking snapshot.
+
+---
+
+### `room_type`
+
+**Purpose**
+
+Represents a normalized room category when available.
+
+Examples:
+
+```text
+STANDARD
+DELUXE
+SUITE
+TWIN
+```
+
+This field may be provider-dependent and should only be used if a reliable normalization exists.
+
+---
+
+### `rate_name`
+
+**Purpose**
+
+Stores the name or description of the selected rate plan.
+
+Examples:
+
+```text
+Flexible Rate
+Non-Refundable Rate
+Breakfast Included
+```
+
+---
+
+### `meal_plan`
+
+**Purpose**
+
+Represents the meal arrangement included in the booked rate.
+
+Possible normalized values may include:
+
+```text
+ROOM_ONLY
+BREAKFAST_INCLUDED
+HALF_BOARD
+FULL_BOARD
+ALL_INCLUSIVE
+```
+
+**Example**
+
+```text
+meal_plan = BREAKFAST_INCLUDED
+```
+
+---
+
+### `adult_count`
+
+**Purpose**
+
+Stores the number of adults assigned to this room.
+
+**Example**
+
+```text
+adult_count = 2
+```
+
+---
+
+### `child_count`
+
+**Purpose**
+
+Stores the number of children assigned to this room.
+
+**Example**
+
+```text
+child_count = 1
+```
+
+Detailed child ages may later be stored through the room-to-guest relationship if required.
+
+---
+
+### `room_amount`
+
+**Purpose**
+
+Stores the amount associated with this booked room and rate.
+
+**Example**
+
+```text
+room_amount = 342.50
+```
+
+For a multi-room booking:
+
+```text
+Room 1 = 342.50 USD
+Room 2 = 342.50 USD
+
+Booking Total = 685.00 USD
+```
+
+The room amounts should reconcile with the booking total according to pricing rules.
+
+---
+
+### `currency`
+
+**Purpose**
+
+Stores the currency of the room amount.
+
+**Example**
+
+```text
+currency = USD
+```
+
+---
+
+### `cancellation_policy`
+
+**Purpose**
+
+Preserves the cancellation terms accepted for this specific booked rate.
+
+The cancellation policy may later change in live provider data, but the booking must preserve the original commercial terms.
+
+The initial logical model may store the normalized policy as:
+
+```text
+FREE_CANCELLATION_UNTIL 2026-09-08
+THEN 100% PENALTY
+```
+
+The exact physical representation will be decided later.
+
+This may eventually become:
+
+- Structured columns.
+- JSON.
+- A separate cancellation-policy snapshot entity.
+
+We should not decide that yet without a clear provider requirement.
+
+---
+
+### `created_at`
+
+**Purpose**
+
+Represents when the booked room snapshot was created.
+
+---
+
+## 9.5 Room-to-Guest Relationship
+
+A multi-room hotel booking requires us to know which guests belong to which room.
+
+We should avoid embedding guest IDs directly inside a room as an array.
+
+The normalized relationship is conceptually:
+
+```text
+HotelBookingRoom
+      *
+      │
+      │
+      *
+HotelBookingGuest
+```
+
+This is a many-to-many relationship.
+
+A small join table may therefore be required:
+
+```text
+hotel_booking_room_guests
+
+hotel_booking_room_id
+hotel_booking_guest_id
+```
+
+Example:
+
+```text
+Room 1
+├── Ahmed
+└── Sara
+
+Room 2
+├── Hassan
+└── Ali
+```
+
+This keeps guest snapshots reusable within the same booking while preserving explicit room allocation.
+
+---
+
+## 9.6 Room Snapshot Principle
+
+The booked room must remain understandable even when the live hotel rate disappears.
+
+Therefore the platform preserves:
+
+```text
+room name
+room/rate references
+rate name
+meal plan
+occupancy
+price
+currency
+cancellation terms
+```
+
+The platform must not depend on fetching the original LiteAPI rate later to understand a confirmed booking.
+
+---
+
+## 9.7 Architectural Decisions
+
+The platform currently adopts the following decisions:
+
+- Hotel rooms are stored separately from the main hotel booking.
+- One booking may contain multiple rooms.
+- Room and rate provider references are stored separately.
+- Room pricing is preserved as historical data.
+- Cancellation terms are preserved as a booking snapshot.
+- Occupancy is stored per room.
+- Room-to-guest allocation is represented explicitly.
+- The initial model remains normalized.
+
+---
+
+# 10. Provider Persistence Design
+
+## 10.1 Overview
+
+`providers` represents external systems integrated with the Travel Booking Platform.
+
+Current examples include:
+
+```text
+Duffel
+LiteAPI
+```
+
+Future examples may include additional:
+
+- Flight providers.
+- Hotel providers.
+- Payment gateways.
+- Notification providers.
+
+The purpose of this table is to keep platform business data independent from specific external provider names.
+
+---
+
+## 10.2 Why a Provider Table?
+
+Without a provider abstraction, booking tables may end up containing provider-specific columns such as:
+
+```text
+duffel_order_id
+liteapi_booking_id
+amadeus_offer_id
+```
+
+This tightly couples the core schema to integration vendors.
+
+Instead, the platform uses:
+
+```text
+provider_id
+provider_offer_reference
+provider_booking_reference
+```
+
+Conceptually:
+
+```text
+FlightBooking
+      │
+      └── provider_id → Duffel
+
+HotelBooking
+      │
+      └── provider_id → LiteAPI
+```
+
+If providers change later, the booking schema remains stable.
+
+---
+
+## 10.3 Proposed Fields
+
+```text
+providers
+
+id
+
+name
+code
+
+type
+
+status
+
+created_at
+updated_at
+```
+
+---
+
+## 10.4 Field Definitions
+
+### `id`
+
+**Purpose**
+
+Represents the unique internal identifier of the provider.
+
+**Example**
+
+```text
+1
+```
+
+---
+
+### `name`
+
+**Purpose**
+
+Stores the human-readable provider name.
+
+Examples:
+
+```text
+Duffel
+LiteAPI
+```
+
+---
+
+### `code`
+
+**Purpose**
+
+Stores a stable internal provider code used by the application.
+
+Examples:
+
+```text
+DUFFEL
+LITE_API
+```
+
+The code should normally remain stable even if the display name changes.
+
+---
+
+### `type`
+
+**Purpose**
+
+Represents the capability or category of the provider.
+
+Possible values:
+
+```text
+FLIGHT
+HOTEL
+PAYMENT
+NOTIFICATION
+```
+
+**Example**
+
+```text
+Duffel
+type = FLIGHT
+
+LiteAPI
+type = HOTEL
+```
+
+If one provider supports multiple capabilities in the future, we may replace this single value with a provider-capability relationship.
+
+For the current scope, one primary type is sufficient.
+
+---
+
+### `status`
+
+**Purpose**
+
+Represents whether the provider is available for new platform operations.
+
+Possible values:
+
+```text
+ACTIVE
+INACTIVE
+MAINTENANCE
+```
+
+**Example**
+
+```text
+status = ACTIVE
+```
+
+Disabling a provider must not affect historical bookings that reference it.
+
+---
+
+### `created_at`
+
+**Purpose**
+
+Represents when the provider configuration record was created.
+
+---
+
+### `updated_at`
+
+**Purpose**
+
+Represents the most recent update to the provider record.
+
+---
+
+## 10.5 What Should Not Be Stored Here?
+
+The `providers` table should not become a generic configuration dump.
+
+For example, avoid placing:
+
+```text
+api_key
+secret_key
+client_secret
+```
+
+directly in this table.
+
+Secrets belong in a secure secret-management mechanism.
+
+Similarly, detailed configuration such as:
+
+```text
+timeouts
+rate limits
+supported markets
+provider-specific feature switches
+```
+
+may later belong in configuration or dedicated provider capability structures if required.
+
+---
+
+## 10.6 Provider References in Bookings
+
+Bookings reference the provider through:
+
+```text
+provider_id
+```
+
+and preserve the external provider identifiers separately.
+
+For flights:
+
+```text
+provider_id                    = Duffel
+provider_offer_reference       = off_...
+provider_booking_reference     = ord_...
+provider_confirmation_reference = Airline PNR
+```
+
+For hotels:
+
+```text
+provider_id                    = LiteAPI
+provider_offer_reference       = rate_...
+provider_booking_reference     = bookingId
+provider_confirmation_reference = confirmationCode
+```
+
+This pattern creates a provider-independent booking domain.
+
+---
+
+## 10.7 Relationship Model
+
+Conceptually:
+
+```text
+Provider
+   1
+   │
+   ├──── * FlightBooking
+   │
+   └──── * HotelBooking
+```
+
+A provider may therefore be associated with many historical bookings.
+
+The provider record must not be deleted when historical references exist.
+
+Deactivation is preferred over deletion.
+
+---
+
+## 10.8 Provider Independence
+
+The database schema treats external providers as integration dependencies rather than core domain owners.
+
+Conceptually:
+
+```text
+External Provider API
+        ↓
+Provider Integration Layer
+        ↓
+Normalized Platform Model
+        ↓
+Database
+```
+
+Provider-specific response structures should not leak into the core persistence model unless required for historical or reconciliation purposes.
+
+---
+
+## 10.9 Architectural Decisions
+
+The platform currently adopts the following decisions:
+
+- External providers have internal platform identities.
+- Flight and hotel bookings reference providers using `provider_id`.
+- Provider-specific column names are avoided.
+- Provider references are stored separately from provider identity.
+- Historical bookings remain valid even when a provider is disabled.
+- Provider secrets are not stored in the core provider table.
+- Provider-specific API structures remain inside the integration layer.

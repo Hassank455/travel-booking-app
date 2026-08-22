@@ -1,0 +1,161 @@
+erDiagram
+
+    CUSTOMERS {
+        bigint id PK
+    }
+
+    PROVIDERS {
+        bigint id PK
+        string name
+        string code
+        string type
+        string status
+        datetime created_at
+        datetime updated_at
+    }
+
+    TRANSACTIONS {
+        bigint id PK
+        bigint customer_id FK
+        bigint provider_id FK
+        string provider_transaction_reference
+        string status
+        string payment_method
+        decimal amount
+        string currency
+        datetime authorized_at
+        datetime completed_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    FLIGHT_BOOKINGS {
+        bigint id PK
+        bigint customer_id FK
+        bigint transaction_id FK
+        bigint provider_id FK
+        string provider_offer_reference
+        string provider_booking_reference
+        string provider_confirmation_reference
+        string status
+        string trip_type
+        decimal total_amount
+        string currency
+        datetime booked_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    FLIGHT_BOOKING_PASSENGERS {
+        bigint id PK
+        bigint flight_booking_id FK
+        bigint traveler_profile_id FK
+        string first_name
+        string last_name
+        date date_of_birth
+        string passenger_type
+        string gender
+        string nationality
+        string document_type
+        string document_number
+        date document_expiry
+        datetime created_at
+    }
+
+    FLIGHT_SEGMENTS {
+        bigint id PK
+        bigint flight_booking_id FK
+        int segment_order
+        string origin_iata_code
+        string destination_iata_code
+        datetime departure_at
+        datetime arrival_at
+        string marketing_carrier
+        string operating_carrier
+        string flight_number
+        string cabin_class
+        string booking_class
+        datetime created_at
+    }
+
+    HOTEL_BOOKINGS {
+        bigint id PK
+        bigint customer_id FK
+        bigint transaction_id FK
+        bigint provider_id FK
+        string provider_offer_reference
+        string provider_booking_reference
+        string provider_confirmation_reference
+        string status
+        string hotel_reference
+        date check_in_date
+        date check_out_date
+        decimal total_amount
+        string currency
+        datetime booked_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    HOTEL_BOOKING_GUESTS {
+        bigint id PK
+        bigint hotel_booking_id FK
+        bigint traveler_profile_id FK
+        string first_name
+        string last_name
+        string email
+        string phone_number
+        date date_of_birth
+        string guest_type
+        boolean is_primary_guest
+        datetime created_at
+    }
+
+    HOTEL_BOOKING_ROOMS {
+        bigint id PK
+        bigint hotel_booking_id FK
+        string provider_room_reference
+        string provider_rate_reference
+        string room_name
+        string room_type
+        string rate_name
+        string meal_plan
+        int adult_count
+        int child_count
+        decimal room_amount
+        string currency
+        string cancellation_policy
+        datetime created_at
+    }
+
+    HOTEL_BOOKING_ROOM_GUESTS {
+        bigint hotel_booking_room_id FK
+        bigint hotel_booking_guest_id FK
+    }
+
+    TRAVELER_PROFILES {
+        bigint id PK
+    }
+
+    CUSTOMERS ||--o{ FLIGHT_BOOKINGS : creates
+    CUSTOMERS ||--o{ HOTEL_BOOKINGS : creates
+    CUSTOMERS ||--o{ TRANSACTIONS : owns
+
+    PROVIDERS ||--o{ FLIGHT_BOOKINGS : handles
+    PROVIDERS ||--o{ HOTEL_BOOKINGS : handles
+    PROVIDERS ||--o{ TRANSACTIONS : processes
+
+    TRANSACTIONS ||--o| FLIGHT_BOOKINGS : linked_to
+    TRANSACTIONS ||--o| HOTEL_BOOKINGS : linked_to
+
+    FLIGHT_BOOKINGS ||--|{ FLIGHT_BOOKING_PASSENGERS : contains
+    FLIGHT_BOOKINGS ||--|{ FLIGHT_SEGMENTS : contains
+
+    TRAVELER_PROFILES ||--o{ FLIGHT_BOOKING_PASSENGERS : source_profile
+    TRAVELER_PROFILES ||--o{ HOTEL_BOOKING_GUESTS : source_profile
+
+    HOTEL_BOOKINGS ||--|{ HOTEL_BOOKING_GUESTS : contains
+    HOTEL_BOOKINGS ||--|{ HOTEL_BOOKING_ROOMS : contains
+
+    HOTEL_BOOKING_ROOMS ||--o{ HOTEL_BOOKING_ROOM_GUESTS : assigns
+    HOTEL_BOOKING_GUESTS ||--o{ HOTEL_BOOKING_ROOM_GUESTS : assigned_to
