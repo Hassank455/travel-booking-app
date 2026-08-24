@@ -1,0 +1,108 @@
+---
+title: Observability Architecture – Travel Booking Platform
+---
+%%{init: {"flowchart": {"curve": "basis", "nodeSpacing": 40, "rankSpacing": 80, "padding": 10}, "themeVariables": {"fontFamily": "Inter, Segoe UI, Helvetica, Arial, sans-serif", "fontSize": "14px"}} }%%
+flowchart LR
+
+    subgraph Client["🖥️ Client"]
+        direction TB
+        WebApp["Customer Web Application"]
+        MobileApp["Customer Mobile Application"]
+    end
+
+    subgraph Monitored["Monitored Components"]
+        direction LR
+
+        subgraph Backend["🧩 Backend Application · Modular Monolith"]
+            direction TB
+            SearchModule["🔎 Search Module"]
+            BookingModule["🧾 Booking Module"]
+            PaymentModule["💳 Payment Module"]
+            NotificationModule["✉️ Notification Module"]
+        end
+
+        Broker["📨 Message Broker<br/><small>Async jobs</small>"]
+        Workers["⚙️ Background Workers"]
+        Database[("🗄️ PostgreSQL<br/><small>Persistent data</small>")]
+        Redis[("⚡ Redis<br/><small>Cache · Locks · Idempotency</small>")]
+
+        subgraph Providers["🔌 External Providers"]
+            direction TB
+            FlightProvider["✈️ Flight Providers"]
+            HotelProvider["🏨 Hotel Providers"]
+            PaymentGateway["🏦 Payment Gateway"]
+            NotificationProvider["📬 Notification Provider"]
+        end
+    end
+
+    subgraph ObservabilityPlatform["Observability Platform"]
+        direction TB
+        Logs["📝 Logs<br/><small>What happened?</small>"]
+        Metrics["📊 Metrics<br/><small>Is something wrong?</small>"]
+        Traces["🧭 Traces<br/><small>Where did it happen?</small>"]
+        Dashboards["📈 Dashboards<br/><small>Operational visibility</small>"]
+        Alerts["🚨 Alerts<br/><small>Actionable incidents</small>"]
+    end
+
+    %% ── Correlation Context: the request path that carries the Correlation ID ──
+    WebApp ==>|"HTTPS Request<br/>Correlation ID created"| Backend
+    MobileApp ==>|"HTTPS Request<br/>Correlation ID created"| Backend
+    Backend ==>|"Publishes jobs"| Broker
+    Broker ==>|"Delivers jobs"| Workers
+    Backend ==>|"Reads / writes"| Database
+    Backend ==>|"Cache · locks"| Redis
+    Backend ==>|"Provider requests"| Providers
+    Workers ==>|"Reads / writes"| Database
+    Workers ==>|"Cache · locks"| Redis
+    Workers ==>|"Reconciliation"| Providers
+
+    %% ── Telemetry ──
+    Backend -.->|"Structured Logs"| Logs
+    Backend -.->|"Metrics"| Metrics
+    Backend -.->|"Trace Spans"| Traces
+
+    Workers -.->|"Worker Logs"| Logs
+    Workers -.->|"Worker Metrics"| Metrics
+    Workers -.->|"Worker Traces"| Traces
+
+    Database -.-> Metrics
+    Redis -.-> Metrics
+    Broker -.-> Metrics
+    Providers -.-> Metrics
+
+    Logs --> Dashboards
+    Metrics --> Dashboards
+    Traces --> Dashboards
+
+    Logs --> Alerts
+    Metrics --> Alerts
+
+    Legend["<b>Correlation Context</b><br/><small>The blue path carries one Correlation ID<br/>from the client request through every hop</small>"]
+
+    %% ── Styling ──
+    classDef client fill:#EEF2FF,stroke:#6366F1,stroke-width:1.5px,color:#1E1B4B,rx:8,ry:8
+    classDef app fill:#DBEAFE,stroke:#2563EB,stroke-width:1.5px,color:#0F2A5C,rx:8,ry:8
+    classDef infra fill:#F1F5F9,stroke:#64748B,stroke-width:1.5px,color:#1F2937,rx:8,ry:8
+    classDef external fill:#FFEDD5,stroke:#EA580C,stroke-width:1.5px,color:#7C2D12,rx:8,ry:8
+    classDef signal fill:#DCFCE7,stroke:#16A34A,stroke-width:1.5px,color:#14532D,rx:8,ry:8
+    classDef output fill:#BBF7D0,stroke:#15803D,stroke-width:1.5px,color:#14532D,rx:8,ry:8
+    classDef legend fill:#FFFFFF,stroke:#2563EB,stroke-width:1.5px,color:#1D4ED8,rx:8,ry:8
+
+    class WebApp,MobileApp client
+    class SearchModule,BookingModule,PaymentModule,NotificationModule,Workers app
+    class Database,Redis,Broker infra
+    class FlightProvider,HotelProvider,PaymentGateway,NotificationProvider external
+    class Logs,Metrics,Traces signal
+    class Dashboards,Alerts output
+    class Legend legend
+
+    style Client fill:#F8FAFF,stroke:#C7D2FE,stroke-width:1.5px,color:#312E81
+    style Monitored fill:#FCFDFF,stroke:#94A3B8,stroke-width:2px,stroke-dasharray:6 4,color:#334155
+    style Backend fill:#F3F8FF,stroke:#2563EB,stroke-width:1.5px,color:#0F2A5C
+    style Providers fill:#FFF9F2,stroke:#EA580C,stroke-width:1.5px,color:#7C2D12
+    style ObservabilityPlatform fill:#F4FDF6,stroke:#16A34A,stroke-width:2px,color:#14532D
+
+    %% Correlation Context path (blue) · telemetry path (green)
+    linkStyle 0,1,2,3,4,5,6,7,8,9 stroke:#2563EB,stroke-width:2.5px,color:#1D4ED8
+    linkStyle 10,11,12,13,14,15,16,17,18,19 stroke:#16A34A,stroke-width:1.4px,color:#15803D
+    linkStyle 20,21,22,23,24 stroke:#15803D,stroke-width:1.4px,color:#15803D
