@@ -4779,3 +4779,650 @@ without changing the existing user/customer model.
 - Fine-grained permissions may be introduced later if required.
 
 ---
+
+# 16. Audit Log Persistence Design
+
+## 16.1 Overview
+
+`audit_logs` records important actions and changes performed within the platform.
+
+Its purpose is to answer questions such as:
+
+- Who performed an action?
+- What entity was affected?
+- What changed?
+- When did the change happen?
+- Why was the action performed?
+
+Audit logs are especially important for sensitive operations involving:
+
+- Bookings.
+- Transactions.
+- Customer accounts.
+- Administrative actions.
+- Provider configuration.
+
+---
+
+## 16.2 Proposed Fields
+
+```text
+audit_logs
+
+id
+
+actor_user_id
+
+entity_type
+entity_id
+
+action
+
+old_values
+new_values
+
+metadata
+
+created_at
+```
+
+---
+
+## 16.3 Field Definitions
+
+### `id`
+
+**Purpose**
+
+Represents the unique internal identifier of the audit record.
+
+---
+
+### `actor_user_id`
+
+**Purpose**
+
+References the user who performed the action when the action was initiated by a platform user.
+
+**Example**
+
+```text
+actor_user_id = 42
+```
+
+The field may be `NULL` for system-generated actions.
+
+Example:
+
+```text
+Provider reconciliation worker
+→ changes booking state
+→ actor_user_id = NULL
+```
+
+---
+
+### `entity_type`
+
+**Purpose**
+
+Identifies the type of entity affected by the action.
+
+Examples:
+
+```text
+FLIGHT_BOOKING
+HOTEL_BOOKING
+TRANSACTION
+CUSTOMER
+PROVIDER
+```
+
+---
+
+### `entity_id`
+
+**Purpose**
+
+Stores the identifier of the affected entity.
+
+**Example**
+
+```text
+entity_type = FLIGHT_BOOKING
+entity_id   = 1001
+```
+
+Together:
+
+```text
+FLIGHT_BOOKING #1001
+```
+
+This is intentionally a flexible audit reference rather than a database foreign key.
+
+Audit logs should remain available even if the underlying entity lifecycle changes.
+
+---
+
+### `action`
+
+**Purpose**
+
+Describes the business or administrative action that occurred.
+
+Examples:
+
+```text
+BOOKING_CONFIRMED
+BOOKING_CANCELLED
+TRANSACTION_STATUS_CHANGED
+CUSTOMER_SUSPENDED
+PROVIDER_DISABLED
+```
+
+---
+
+### `old_values`
+
+**Purpose**
+
+Stores the relevant state before the change when useful.
+
+Example:
+
+```json
+{
+  "status": "PROCESSING"
+}
+```
+
+---
+
+### `new_values`
+
+**Purpose**
+
+Stores the relevant state after the change.
+
+Example:
+
+```json
+{
+  "status": "CONFIRMED"
+}
+```
+
+---
+
+### `metadata`
+
+**Purpose**
+
+Stores additional operational context that may help with investigation.
+
+Examples may include:
+
+```text
+reason
+correlation_id
+provider_reference
+admin_comment
+source
+```
+
+This field should not become a replacement for core relational data.
+
+---
+
+### `created_at`
+
+**Purpose**
+
+Represents when the audited action occurred.
+
+---
+
+## 16.4 Example
+
+```text
+Actor
+Admin #42
+
+Action
+BOOKING_CANCELLED
+
+Entity
+HOTEL_BOOKING #2001
+
+Old State
+CONFIRMED
+
+New State
+CANCELLED
+
+Reason
+Customer support request
+```
+
+---
+
+## 16.5 Architectural Decisions
+
+- Audit logs are append-only operational records.
+- Audit logs do not control the current business state.
+- Entity references are intentionally flexible.
+- System-generated events may not have an actor user.
+- Sensitive administrative and financial actions should be auditable.
+- Audit metadata must not contain unnecessary secrets or sensitive payment credentials.
+
+---
+
+# 17. Booking Status History Persistence Design
+
+## 17.1 Overview
+
+The current booking status is stored directly inside:
+
+```text
+flight_bookings.status
+hotel_bookings.status
+```
+
+However, the current status alone does not explain how the booking reached that state.
+
+The platform therefore preserves important status transitions.
+
+Because flight and hotel bookings are independent business entities, the initial design uses separate history tables:
+
+```text
+flight_booking_status_history
+hotel_booking_status_history
+```
+
+This preserves strong foreign-key relationships and avoids polymorphic booking references.
+
+---
+
+# 17.2 Flight Booking Status History
+
+## Proposed Fields
+
+```text
+flight_booking_status_history
+
+id
+flight_booking_id
+
+previous_status
+new_status
+
+reason
+source
+
+changed_at
+```
+
+---
+
+### `flight_booking_id`
+
+References the flight booking whose status changed.
+
+Relationship:
+
+```text
+FlightBooking
+      1
+      │
+      └──── *
+          StatusHistory
+```
+
+---
+
+### `previous_status`
+
+Stores the booking state before the transition.
+
+Example:
+
+```text
+PROCESSING
+```
+
+For the initial status, this value may be `NULL`.
+
+---
+
+### `new_status`
+
+Stores the state after the transition.
+
+Example:
+
+```text
+CONFIRMED
+```
+
+---
+
+### `reason`
+
+Stores an optional explanation for the transition.
+
+Examples:
+
+```text
+Provider confirmed order
+Payment failed
+Booking expired
+Manual support action
+```
+
+---
+
+### `source`
+
+Identifies what initiated the status change.
+
+Possible values:
+
+```text
+SYSTEM
+CUSTOMER
+ADMIN
+PROVIDER
+WORKER
+```
+
+---
+
+### `changed_at`
+
+Represents when the status transition occurred.
+
+---
+
+## 17.3 Hotel Booking Status History
+
+The hotel history table follows the same principle:
+
+```text
+hotel_booking_status_history
+
+id
+hotel_booking_id
+
+previous_status
+new_status
+
+reason
+source
+
+changed_at
+```
+
+It references `hotel_bookings` directly.
+
+---
+
+## 17.4 Example Lifecycle
+
+```text
+PENDING
+   ↓
+PROCESSING
+   ↓
+CONFIRMED
+   ↓
+COMPLETED
+```
+
+A failed flow may look like:
+
+```text
+PENDING
+   ↓
+PROCESSING
+   ↓
+FAILED
+```
+
+The main booking table stores only:
+
+```text
+status = CONFIRMED
+```
+
+while the history table preserves the full path.
+
+---
+
+## 17.5 Why Not a Single Polymorphic History Table?
+
+An alternative would be:
+
+```text
+booking_status_history
+
+booking_type
+booking_id
+```
+
+This is flexible, but the database cannot enforce a real foreign key from `booking_id` to two different booking tables.
+
+Because booking status is business-critical, the initial design prefers:
+
+```text
+flight_booking_status_history
+hotel_booking_status_history
+```
+
+This maintains strong referential integrity.
+
+---
+
+## 17.6 Architectural Decisions
+
+- Current status remains on the main booking table.
+- Status history is append-only.
+- Flight and hotel status histories remain separate.
+- Status transitions preserve reason, source, and timestamp.
+- Status history does not replace audit logging.
+- Database foreign keys are preferred over polymorphic references for booking integrity.
+
+---
+
+# 18. Notification Persistence Design
+
+## 18.1 Overview
+
+`notifications` stores important customer communication attempts and delivery outcomes.
+
+Typical notifications include:
+
+- Booking confirmation.
+- Booking failure.
+- Transaction result.
+- Cancellation confirmation.
+- Provider-originated booking changes.
+
+The initial design keeps notification persistence intentionally simple.
+
+---
+
+## 18.2 Proposed Fields
+
+```text
+notifications
+
+id
+customer_id
+
+type
+channel
+status
+
+related_entity_type
+related_entity_id
+
+sent_at
+
+created_at
+updated_at
+```
+
+---
+
+## 18.3 Field Definitions
+
+### `id`
+
+Unique internal notification identifier.
+
+---
+
+### `customer_id`
+
+References the customer receiving the notification.
+
+---
+
+### `type`
+
+Represents the business purpose of the notification.
+
+Examples:
+
+```text
+BOOKING_CONFIRMED
+BOOKING_FAILED
+TRANSACTION_SUCCEEDED
+TRANSACTION_FAILED
+BOOKING_CANCELLED
+```
+
+---
+
+### `channel`
+
+Represents the delivery channel.
+
+Examples:
+
+```text
+EMAIL
+SMS
+PUSH
+IN_APP
+```
+
+---
+
+### `status`
+
+Represents the notification delivery state.
+
+Possible values:
+
+```text
+PENDING
+SENT
+FAILED
+```
+
+---
+
+### `related_entity_type`
+
+Identifies the business entity related to the notification.
+
+Examples:
+
+```text
+FLIGHT_BOOKING
+HOTEL_BOOKING
+TRANSACTION
+```
+
+---
+
+### `related_entity_id`
+
+Stores the related entity identifier.
+
+Example:
+
+```text
+related_entity_type = FLIGHT_BOOKING
+related_entity_id   = 1001
+```
+
+This relationship is intentionally flexible.
+
+Unlike booking and transaction integrity relationships, notification references do not control business correctness.
+
+---
+
+### `sent_at`
+
+Represents when the notification was successfully sent.
+
+The value remains `NULL` until successful delivery.
+
+---
+
+### `created_at`
+
+Represents when the notification record was created.
+
+---
+
+### `updated_at`
+
+Represents the latest delivery-status update.
+
+---
+
+## 18.4 Why No Notification Type or Status Tables?
+
+The initial scope does not require:
+
+```text
+notification_types
+notification_statuses
+sms_provider_settings
+email_provider_settings
+```
+
+Simple normalized values are sufficient.
+
+More complex notification configuration may be introduced when the notification domain grows.
+
+---
+
+## 18.5 Notification Failure
+
+Notification failure must never change the underlying booking or transaction result.
+
+For example:
+
+```text
+Booking = CONFIRMED
+Notification = FAILED
+```
+
+is a valid system state.
+
+The notification may be retried asynchronously.
+
+---
+
+## 18.6 Architectural Decisions
+
+- Notifications are persisted independently from booking state.
+- Notification failure never rolls back a successful booking.
+- Notification types and statuses remain simple values in v1.
+- Flexible entity references are acceptable for notification traceability.
+- Provider-specific email or SMS configuration remains outside the core notification table.

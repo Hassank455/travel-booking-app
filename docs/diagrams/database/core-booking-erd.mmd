@@ -1,14 +1,35 @@
 erDiagram
 
+    %% =========================================================
+    %% IDENTITY
+    %% =========================================================
+
     USERS {
         bigint id PK
-        string email
+        string email UK
         string password_hash
         string status
         datetime email_verified_at
         datetime created_at
         datetime updated_at
     }
+
+    ROLES {
+        bigint id PK
+        string code UK
+        string name
+        datetime created_at
+    }
+
+    USER_ROLES {
+        bigint user_id FK
+        bigint role_id FK
+        datetime created_at
+    }
+
+    %% =========================================================
+    %% CUSTOMER
+    %% =========================================================
 
     CUSTOMERS {
         bigint id PK
@@ -18,19 +39,6 @@ erDiagram
         string phone_number
         datetime created_at
         datetime updated_at
-    }
-
-    ROLES {
-        bigint id PK
-        string code
-        string name
-        datetime created_at
-    }
-
-    USER_ROLES {
-        bigint user_id FK
-        bigint role_id FK
-        datetime created_at
     }
 
     ADDRESSES {
@@ -63,15 +71,23 @@ erDiagram
         datetime updated_at
     }
 
+    %% =========================================================
+    %% PROVIDERS
+    %% =========================================================
+
     PROVIDERS {
         bigint id PK
         string name
-        string code
+        string code UK
         string type
         string status
         datetime created_at
         datetime updated_at
     }
+
+    %% =========================================================
+    %% TRANSACTIONS
+    %% =========================================================
 
     TRANSACTIONS {
         bigint id PK
@@ -87,6 +103,10 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
+
+    %% =========================================================
+    %% FLIGHT BOOKING
+    %% =========================================================
 
     FLIGHT_BOOKINGS {
         bigint id PK
@@ -136,6 +156,20 @@ erDiagram
         string booking_class
         datetime created_at
     }
+
+    FLIGHT_BOOKING_STATUS_HISTORY {
+        bigint id PK
+        bigint flight_booking_id FK
+        string previous_status
+        string new_status
+        string reason
+        string source
+        datetime changed_at
+    }
+
+    %% =========================================================
+    %% HOTEL BOOKING
+    %% =========================================================
 
     HOTEL_BOOKINGS {
         bigint id PK
@@ -192,10 +226,56 @@ erDiagram
         bigint hotel_booking_guest_id FK
     }
 
+    HOTEL_BOOKING_STATUS_HISTORY {
+        bigint id PK
+        bigint hotel_booking_id FK
+        string previous_status
+        string new_status
+        string reason
+        string source
+        datetime changed_at
+    }
+
+    %% =========================================================
+    %% NOTIFICATIONS / AUDIT
+    %% =========================================================
+
+    NOTIFICATIONS {
+        bigint id PK
+        bigint customer_id FK
+        string type
+        string channel
+        string status
+        string related_entity_type
+        bigint related_entity_id
+        datetime sent_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    AUDIT_LOGS {
+        bigint id PK
+        bigint actor_user_id FK
+        string entity_type
+        bigint entity_id
+        string action
+        json old_values
+        json new_values
+        json metadata
+        datetime created_at
+    }
+
+
+    %% =========================================================
+    %% RELATIONSHIPS
+    %% =========================================================
 
     USERS ||--o| CUSTOMERS : has
+
     USERS ||--o{ USER_ROLES : assigned
     ROLES ||--o{ USER_ROLES : contains
+
+    USERS ||--o{ AUDIT_LOGS : performs
 
     CUSTOMERS ||--o{ ADDRESSES : has
     CUSTOMERS ||--o{ TRAVELER_PROFILES : owns
@@ -203,6 +283,7 @@ erDiagram
     CUSTOMERS ||--o{ FLIGHT_BOOKINGS : creates
     CUSTOMERS ||--o{ HOTEL_BOOKINGS : creates
     CUSTOMERS ||--o{ TRANSACTIONS : owns
+    CUSTOMERS ||--o{ NOTIFICATIONS : receives
 
     PROVIDERS ||--o{ FLIGHT_BOOKINGS : handles
     PROVIDERS ||--o{ HOTEL_BOOKINGS : handles
@@ -213,12 +294,75 @@ erDiagram
 
     FLIGHT_BOOKINGS ||--|{ FLIGHT_BOOKING_PASSENGERS : contains
     FLIGHT_BOOKINGS ||--|{ FLIGHT_SEGMENTS : contains
+    FLIGHT_BOOKINGS ||--o{ FLIGHT_BOOKING_STATUS_HISTORY : transitions
 
     TRAVELER_PROFILES ||--o{ FLIGHT_BOOKING_PASSENGERS : source_profile
     TRAVELER_PROFILES ||--o{ HOTEL_BOOKING_GUESTS : source_profile
 
     HOTEL_BOOKINGS ||--|{ HOTEL_BOOKING_GUESTS : contains
     HOTEL_BOOKINGS ||--|{ HOTEL_BOOKING_ROOMS : contains
+    HOTEL_BOOKINGS ||--o{ HOTEL_BOOKING_STATUS_HISTORY : transitions
 
     HOTEL_BOOKING_ROOMS ||--o{ HOTEL_BOOKING_ROOM_GUESTS : assigns
     HOTEL_BOOKING_GUESTS ||--o{ HOTEL_BOOKING_ROOM_GUESTS : assigned_to
+
+
+    %% =========================================================
+    %% ENUM REFERENCES — NOTES ONLY, NOT DATABASE TABLES
+    %% =========================================================
+
+    BOOKING_STATUS_ENUM {
+        string PENDING
+        string PROCESSING
+        string CONFIRMED
+        string FAILED
+        string CANCELLED
+        string COMPLETED
+        string MANUAL_REVIEW
+    }
+
+    TRANSACTION_STATUS_ENUM {
+        string PENDING
+        string AUTHORIZED
+        string SUCCEEDED
+        string FAILED
+        string CANCELLED
+    }
+
+    USER_STATUS_ENUM {
+        string ACTIVE
+        string SUSPENDED
+        string DISABLED
+        string PENDING_VERIFICATION
+    }
+
+    PASSENGER_TYPE_ENUM {
+        string ADULT
+        string CHILD
+        string INFANT
+    }
+
+    GUEST_TYPE_ENUM {
+        string ADULT
+        string CHILD
+    }
+
+    PROVIDER_TYPE_ENUM {
+        string FLIGHT
+        string HOTEL
+        string PAYMENT
+        string NOTIFICATION
+    }
+
+    NOTIFICATION_CHANNEL_ENUM {
+        string EMAIL
+        string SMS
+        string PUSH
+        string IN_APP
+    }
+
+    NOTIFICATION_STATUS_ENUM {
+        string PENDING
+        string SENT
+        string FAILED
+    }
