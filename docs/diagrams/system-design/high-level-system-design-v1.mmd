@@ -1,0 +1,75 @@
+flowchart TB
+
+    subgraph Clients["Client Applications"]
+        Web["Web Application"]
+        Mobile["Mobile Application"]
+    end
+
+    LB["Load Balancer"]
+
+    subgraph Application["Backend Application<br/>Modular Monolith"]
+        Search["Search Module"]
+        Booking["Booking Module"]
+        Customer["Customer Module"]
+        Payment["Payment Module"]
+        Notification["Notification Module"]
+    end
+
+    Redis["Redis<br/>Search Cache<br/>Locks<br/>Idempotency<br/>Temporary State"]
+
+    PostgreSQL["PostgreSQL<br/>Customers<br/>Bookings<br/>Transactions"]
+
+    Broker["Message Broker"]
+
+    Workers["Background Workers<br/>Retries<br/>Reconciliation<br/>Notifications"]
+
+    subgraph TravelProviders["Travel Providers"]
+        FlightProvider["Flight Provider<br/>Duffel"]
+        HotelProvider["Hotel Provider<br/>LiteAPI"]
+    end
+
+    PaymentProvider["Payment Provider"]
+
+    NotificationProvider["Notification Provider"]
+
+    Observability["Observability Platform<br/>Logs • Metrics • Traces • Alerts"]
+
+    Web --> LB
+    Mobile --> LB
+
+    LB --> Application
+
+    Search --> Redis
+    Search --> FlightProvider
+    Search --> HotelProvider
+
+    Booking --> FlightProvider
+    Booking --> HotelProvider
+
+    Booking --> Payment
+    Payment --> PaymentProvider
+
+    Customer --> PostgreSQL
+    Booking --> PostgreSQL
+    Payment --> PostgreSQL
+
+    Booking --> Broker
+    Payment --> Broker
+    Notification --> Broker
+
+    Broker --> Workers
+
+    Workers --> PostgreSQL
+    Workers --> FlightProvider
+    Workers --> HotelProvider
+    Workers --> PaymentProvider
+    Workers --> NotificationProvider
+
+    Application -.-> Observability
+    Redis -.-> Observability
+    PostgreSQL -.-> Observability
+    Broker -.-> Observability
+    Workers -.-> Observability
+    FlightProvider -.-> Observability
+    HotelProvider -.-> Observability
+    PaymentProvider -.-> Observability
